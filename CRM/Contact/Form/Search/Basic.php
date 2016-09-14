@@ -60,6 +60,9 @@ class CRM_Contact_Form_Search_Basic extends CRM_Contact_Form_Search {
    * @return void
    */
   function buildQuickForm() {
+    $config = CRM_Core_Config::singleton();
+    $url_parts = parse_url($config->userFrameworkBaseURL);
+    var_dump(CRM_Utils_System::isSSL());exit;
     // text for sort_name or email criteria
     $config = CRM_Core_Config::singleton();
     $label = empty($config->includeEmailInName) ? ts('Name') : ts('Name or Email');
