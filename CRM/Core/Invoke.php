@@ -418,6 +418,8 @@ class CRM_Core_Invoke {
     }
 
     if ($secondArg == 'edit' || $secondArg == 'create') {
+      $allowRemoteSubmit = CRM_Core_BAO_Setting::getItem(CRM_Core_BAO_Setting::SYSTEM_PREFERENCES_NAME, 'remote_profile_submissions');
+
       // set the userContext stack
       $session = CRM_Core_Session::singleton();
       $session->pushUserContext(CRM_Utils_System::url('civicrm/profile', 'reset=1'));
@@ -426,7 +428,7 @@ class CRM_Core_Invoke {
         $controller = new CRM_Core_Controller_Simple('CRM_Profile_Form_Edit',
           ts('Create Profile'),
           CRM_Core_Action::UPDATE,
-          FALSE, FALSE, TRUE
+          FALSE, FALSE, $allowRemoteSubmit
         );
         $controller->set('edit', 1);
         $controller->process();
@@ -438,7 +440,7 @@ class CRM_Core_Invoke {
           ts('Create Profile'),
           array(
             'mode' => CRM_Core_Action::ADD,
-            'ignoreKey' => TRUE,
+            'ignoreKey' => $allowRemoteSubmit,
           )
         );
       }
