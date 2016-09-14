@@ -517,6 +517,7 @@ class CRM_Core_Permission {
       'delete contacts' => $prefix . ts('delete contacts'),
       'access deleted contacts' => $prefix . ts('access deleted contacts'),
       'import contacts' => $prefix . ts('import contacts'),
+      'import SQL datasource' => $prefix . ts('import SQL datasource'),
       'edit groups' => $prefix . ts('edit groups'),
       'administer CiviCRM' => $prefix . ts('administer CiviCRM'),
       'skip IDS check' => $prefix . ts('skip IDS check'),

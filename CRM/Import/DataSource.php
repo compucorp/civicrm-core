@@ -42,7 +42,10 @@ abstract class CRM_Import_DataSource {
   /**
    * Provides information about the data source
    *
-   * @return array collection of info about this data source
+   * @return array
+   *   Description of this data source, including:
+   *   - title: string, translated, required
+   *   - permissions: array, optional
    *
    * @access public
    *
@@ -72,5 +75,16 @@ abstract class CRM_Import_DataSource {
    * @access public
    */
   abstract public function postProcess(&$params, &$db, &$form);
+
+  /**
+   * Determine if the current user has access to this data source.
+   *
+   * @return bool
+   */
+  public function checkPermission() {
+    $info = $this->getInfo();
+    return empty($info['permissions']) || CRM_Core_Permission::check($info['permissions']);
+  }
+
 }
 
