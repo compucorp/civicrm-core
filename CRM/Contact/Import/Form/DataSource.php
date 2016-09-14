@@ -109,12 +109,16 @@ class CRM_Contact_Import_Form_DataSource extends CRM_Core_Form {
       $this->assign('showOnlyDataSourceFormPane', TRUE);
     }
 
-    if (strpos($this->_dataSource, 'CRM_Import_DataSource_') === 0) {
+    $dataSources = $this->_getDataSources();
+    if ($this->_dataSource && isset($dataSources[$this->_dataSource])) {
       $this->_dataSourceIsValid = TRUE;
       $this->assign('showDataSourceFormPane', TRUE);
       $dataSourcePath = explode('_', $this->_dataSource);
       $templateFile = "CRM/Contact/Import/Form/" . $dataSourcePath[3] . ".tpl";
       $this->assign('dataSourceFormTemplateFile', $templateFile);
+    }
+    elseif ($this->_dataSource) {
+      throw new \CRM_Core_Exception("Invalid data source");
     }
   }
 
@@ -266,7 +270,9 @@ class CRM_Contact_Import_Form_DataSource extends CRM_Core_Form {
         require_once $dataSourceDir . DIRECTORY_SEPARATOR . $dataSourceFile;
         $object = new $dataSourceClass;
         $info   = $object->getInfo();
-        $dataSources[$dataSourceClass] = $info['title'];
+        if ($object->checkPermission()) {
+          $dataSources[$dataSourceClass] = $info['title'];
+        }
       }
     }
     closedir($dataSourceHandle);

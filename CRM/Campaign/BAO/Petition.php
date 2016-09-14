@@ -219,8 +219,10 @@ SELECT  petition.id                         as id,
         CRM_Core_BAO_CustomValueTable::store($params['custom'], 'civicrm_activity', $activity->id);
       }
 
-      // set permanent cookie to indicate this petition already signed on the computer
-      setcookie('signed_' . $params['sid'], $activity->id, time() + $this->cookieExpire, '/');
+      // Set browser cookie to indicate this petition was already signed.
+      $config = CRM_Core_Config::singleton();
+      $url_parts = parse_url($config->userFrameworkBaseURL);
+      setcookie('signed_' . $params['sid'], $activity->id, time() + $this->cookieExpire, $url_parts['path'], $url_parts['host'], CRM_Utils_System::isSSL());
     }
 
     return $activity;
