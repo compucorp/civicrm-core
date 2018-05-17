@@ -1,6 +1,16 @@
 'use strict';
 
-describe('crmCaseType', function() {
+fdescribe('crmCaseType', function() {
+  var $controller;
+  var $compile;
+  var $httpBackend;
+  var $q;
+  var $rootScope;
+  var $timeout;
+  var apiCalls;
+  var ctrl;
+  var compile;
+  var scope;
 
   beforeEach(function() {
     CRM.resourceUrls = {
@@ -17,19 +27,17 @@ describe('crmCaseType', function() {
     });
   });
 
-  describe('CaseTypeCtrl', function() {
-    var apiCalls;
-    var ctrl;
-    var compile;
-    var $httpBackend;
-    var scope;
-    var timeout;
+  beforeEach(inject(function(_$controller_, _$compile_, _$httpBackend_, _$q_, _$rootScope_, _$timeout_) {
+    $controller = _$controller_;
+    $compile = _$compile_;
+    $httpBackend = _$httpBackend_;
+    $q = _$q_;
+    $rootScope = _$rootScope_;
+    $timeout = _$timeout_;
+  }));
 
-    beforeEach(inject(function(_$httpBackend_, $rootScope, $controller, $compile, $timeout) {
-      $httpBackend = _$httpBackend_;
-      scope = $rootScope.$new();
-      compile = $compile;
-      timeout = $timeout;
+  describe('CaseTypeCtrl', function() {
+    beforeEach(inject(function() {
       apiCalls = {
         actStatuses: {
           values: [
@@ -254,5 +262,188 @@ describe('crmCaseType', function() {
       expect(newSet.label).toBe('Timeline #2');
     });
 
+  });
+
+  describe('crmEditableTabTitle', function () {
+    var element, titleLabel, penIcon, saveButton, cancelButton;
+
+    beforeEach(function() {
+      scope = $rootScope.$new();
+      element = '<div crm-editable-tab-title title="Click to edit">' +
+        '<span>{{ activitySet.label }}</span>' +
+        '</div>';
+
+      scope.activitySet = { label: 'Title'};
+      element = $compile(element)(scope);
+
+      titleLabel = $(element).find('span');
+      penIcon = $(element).find('i.fa-pencil');
+      saveButton = $(element).find('button[type=button]');
+      cancelButton = $(element).find('button[type=cancel]');
+
+      scope.$digest();
+    });
+
+    describe('when initialized', function () {
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+    });
+
+    describe('when clicked on title label', function () {
+      beforeEach(function () {
+        titleLabel.click();
+      });
+
+      it('hides the pen icon', function () {
+        expect(penIcon.css('display') === 'none').toBe(true);
+      });
+
+      it('shows the save button', function () {
+        expect(saveButton.parent().css('display') !== 'none').toBe(true);
+      });
+
+      it('makes the title editable', function () {
+        expect(titleLabel.attr('contenteditable')).toBe('true');
+      });
+    });
+
+    describe('when clicked outside of the editable area', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.blur();
+        $timeout.flush();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
+
+    describe('when ESCAPE key is pressed while typing', function () {
+      beforeEach(function () {
+        var eventObj = $.Event('keydown');
+        eventObj.key = 'Escape';
+
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.trigger(eventObj);
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
+
+    describe('when ENTER key is pressed while typing', function () {
+      beforeEach(function () {
+        var eventObj = $.Event('keydown');
+        eventObj.key = 'Enter';
+
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.trigger(eventObj);
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('updates the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Updated Title');
+      });
+    });
+
+    describe('when SAVE button is clicked', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        saveButton.click();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('updates the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Updated Title');
+      });
+    });
+
+    describe('when CANCEL button is clicked', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        cancelButton.click();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
   });
 });
