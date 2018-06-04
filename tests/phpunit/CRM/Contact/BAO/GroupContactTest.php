@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -329,7 +329,7 @@ class CRM_Contact_BAO_GroupContactTest extends CiviUnitTestCase {
     foreach ($useCases as $case) {
       $query = new CRM_Contact_BAO_Query(CRM_Contact_BAO_Query::convertFormValues($case['form_value']));
       list($select, $from, $where, $having) = $query->query();
-      $groupContacts = CRM_Core_DAO::executeQuery("SELECT DISTINCT contact_a.id $from $where ORDER BY contact_a.first_name")->fetchAll();
+      $groupContacts = CRM_Core_DAO::executeQuery("SELECT DISTINCT contact_a.id, contact_a.first_name $from $where ORDER BY contact_a.first_name")->fetchAll();
       foreach ($groupContacts as $key => $value) {
         $groupContacts[$key] = $value['id'];
       }

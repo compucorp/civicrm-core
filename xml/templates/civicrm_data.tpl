@@ -1,7 +1,7 @@
 -- +--------------------------------------------------------------------+
 -- | CiviCRM version 4.7                                                |
 -- +--------------------------------------------------------------------+
--- | Copyright CiviCRM LLC (c) 2004-2017                                |
+-- | Copyright CiviCRM LLC (c) 2004-2018                                |
 -- +--------------------------------------------------------------------+
 -- | This file is a part of CiviCRM.                                    |
 -- |                                                                    |
@@ -1480,7 +1480,8 @@ INSERT INTO civicrm_mailing_bounce_pattern
     (@bounceTypeID, 'has a policy that( [^ ]*)? prohibited the mail that you sent'),
     (@bounceTypeID, 'is likely unsolicited mail'),
     (@bounceTypeID, 'Local Policy Violation'),
-    (@bounceTypeID, 'ni bilo mogo..?e dostaviti zaradi varnostnega pravilnika');
+    (@bounceTypeID, 'ni bilo mogo..?e dostaviti zaradi varnostnega pravilnika'),
+    (@bounceTypeID, 'abuse report');
 
 INSERT INTO civicrm_mailing_bounce_type
         (name, description, hold_threshold)

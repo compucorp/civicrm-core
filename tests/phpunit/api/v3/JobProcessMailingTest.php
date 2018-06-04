@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -31,13 +31,10 @@
  * @package CiviCRM_APIv3
  * @subpackage API_Job
  *
- * @copyright CiviCRM LLC (c) 2004-2017
+ * @copyright CiviCRM LLC (c) 2004-2018
  * @version $Id: Job.php 30879 2010-11-22 15:45:55Z shot $
  *
  */
-
-//@todo - why doesn't class loader find these (I tried renaming)
-require_once 'CiviTest/CiviMailUtils.php';
 
 /**
  * Class api_v3_JobTest
@@ -121,6 +118,10 @@ class api_v3_JobProcessMailingTest extends CiviUnitTestCase {
       'environment' => 'Staging',
     );
     $this->callAPISuccess('Setting', 'create', $params);
+    //Assert if outbound mail is disabled.
+    $mailingBackend = Civi::settings()->get('mailing_backend');
+    $this->assertEquals($mailingBackend['outBound_option'], CRM_Mailing_Config::OUTBOUND_OPTION_DISABLED);
+
     $this->createContactsInGroup(10, $this->_groupID);
     Civi::settings()->add(array(
       'mailerBatchLimit' => 2,
@@ -132,6 +133,21 @@ class api_v3_JobProcessMailingTest extends CiviUnitTestCase {
     // Test with runInNonProductionEnvironment param.
     $this->callAPISuccess('job', 'process_mailing', array('runInNonProductionEnvironment' => TRUE));
     $this->_mut->assertRecipients($this->getRecipients(1, 2));
+
+    $jobId = $this->callAPISuccessGetValue('Job', array(
+      'return' => "id",
+      'api_action' => "group_rebuild",
+    ));
+    $this->callAPISuccess('Job', 'create', array(
+      'id' => $jobId,
+      'parameters' => "runInNonProductionEnvironment=TRUE",
+    ));
+    $jobManager = new CRM_Core_JobManager();
+    $jobManager->executeJobById($jobId);
+
+    //Assert if outbound mail is still disabled.
+    $mailingBackend = Civi::settings()->get('mailing_backend');
+    $this->assertEquals($mailingBackend['outBound_option'], CRM_Mailing_Config::OUTBOUND_OPTION_DISABLED);
 
     // Test in production mode.
     $params = array(

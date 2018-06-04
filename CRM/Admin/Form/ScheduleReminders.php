@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2017
+ * @copyright CiviCRM LLC (c) 2004-2018
  */
 
 /**
@@ -168,11 +168,10 @@ class CRM_Admin_Form_ScheduleReminders extends CRM_Admin_Form {
     $this->add('number', 'start_action_offset', ts('When'), array('class' => 'six', 'min' => 0));
     $this->addRule('start_action_offset', ts('Value should be a positive number'), 'positiveInteger');
 
-    $isActive = ts('Send email');
+    $isActive = ts('Scheduled Reminder Active');
     $recordActivity = ts('Record activity for automated email');
     if ($providersCount) {
       $this->assign('sms', $providersCount);
-      $isActive = ts('Send email or SMS');
       $recordActivity = ts('Record activity for automated email or SMS');
       $options = CRM_Core_OptionGroup::values('msg_mode');
       $this->add('select', 'mode', ts('Send as'), $options);
@@ -348,6 +347,13 @@ class CRM_Admin_Form_ScheduleReminders extends CRM_Admin_Form {
     );
     if ($fields['limit_to'] != '' && array_key_exists($fields['recipient'], $recipientKind) && empty($fields[$recipientKind[$fields['recipient']]['target_id']])) {
       $errors[$recipientKind[$fields['recipient']]['target_id']] = ts('If "Also include" or "Limit to" are selected, you must specify at least one %1', array(1 => $recipientKind[$fields['recipient']]['name']));
+    }
+
+    //CRM-21523
+    if (!empty($fields['is_repeat']) &&
+      (empty($fields['repetition_frequency_interval']) || ($fields['end_frequency_interval'] == NULL))
+    ) {
+      $errors['is_repeat'] = ts('If you are enabling repetition you must indicate the frequency and ending term.');
     }
 
     $actionSchedule = $self->parseActionSchedule($fields);

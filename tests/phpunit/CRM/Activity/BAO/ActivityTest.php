@@ -310,6 +310,7 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
       'caseId' => NULL,
       'context' => 'home',
       'activity_type_id' => NULL,
+      'activity_status_id' => CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'status_id', 'Scheduled'), // for dashlet the Scheduled status is set by default
       'offset' => 0,
       'rowCount' => 0,
       'sort' => NULL,
@@ -496,6 +497,7 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
       'caseId' => NULL,
       'context' => 'home',
       'activity_type_id' => NULL,
+      'activity_status_id' => CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'status_id', 'Scheduled'), // for dashlet the Scheduled status is set by default
       'offset' => 0,
       'rowCount' => 0,
       'sort' => NULL,
@@ -743,7 +745,7 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
   /**
    * CRM-20793 : Test getActivities by using activity date and status filter
    */
-  public function testbyActivityDateAndStatus() {
+  public function testByActivityDateAndStatus() {
     $op = new PHPUnit_Extensions_Database_Operation_Insert();
     $op->execute($this->_dbconn,
       $this->createFlatXMLDataSet(
@@ -755,13 +757,15 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
     $lastWeekActivities = array(1, 2, 3);
     $todayActivities = array(4, 5, 6, 7);
     $lastTwoMonthsActivities = array(8, 9, 10, 11);
-    $lastYearActivties = array(12, 13, 14, 15, 16);
+    $lastOrNextYearActivities = array(12, 13, 14, 15, 16);
 
     // date values later used to set activity date value
     $lastWeekDate = date('YmdHis', strtotime('1 week ago'));
     $today = date('YmdHis');
     $lastTwoMonthAgoDate = date('YmdHis', strtotime('2 months ago'));
-    $lastYearDate = date('YmdHis', strtotime('1 year ago'));
+    // if current month is Jan then choose next year date otherwise the search result will include
+    //  the previous week and last two months activities which are still in previous year and hence leads to improper result
+    $lastOrNextYearDate = (date('M') == 'Jan') ? date('YmdHis', strtotime('+1 year')) : date('YmdHis', strtotime('1 year ago'));
     for ($i = 1; $i <= 16; $i++) {
       if (in_array($i, $lastWeekActivities)) {
         $date = $lastWeekDate;
@@ -769,8 +773,8 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
       elseif (in_array($i, $lastTwoMonthsActivities)) {
         $date = $lastTwoMonthAgoDate;
       }
-      elseif (in_array($i, $lastYearActivties)) {
-        $date = $lastYearDate;
+      elseif (in_array($i, $lastOrNextYearActivities)) {
+        $date = $lastOrNextYearDate;
       }
       elseif (in_array($i, $todayActivities)) {
         $date = $today;
@@ -836,19 +840,6 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
           'sort' => NULL,
         ),
       ),
-      'last-year-activity' => array(
-        'params' => array(
-          'contact_id' => 1,
-          'admin' => TRUE,
-          'caseId' => NULL,
-          'context' => 'activity',
-          'activity_date_relative' => 'previous.year',
-          'activity_type_id' => NULL,
-          'offset' => 0,
-          'rowCount' => 0,
-          'sort' => NULL,
-        ),
-      ),
       'activity-of-all-statuses' => array(
         'params' => array(
           'contact_id' => 1,
@@ -885,16 +876,74 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
         $this->assertEquals(count($lastTwoMonthsActivities), count($activitiesDep));
         $this->checkArrayEquals($lastTwoMonthsActivities, $activityIDs);
       }
-      elseif ($caseName == 'last-year-activity') {
-        $this->assertEquals(count($lastYearActivties), $activityCount);
-        $this->assertEquals(count($lastYearActivties), count($activitiesDep));
-        $this->checkArrayEquals($lastYearActivties, $activityIDs);
+      elseif ($caseName == 'last-or-next-year-activity') {
+        $this->assertEquals(count($lastOrNextYearActivities), $activityCount);
+        $this->assertEquals(count($lastOrNextYearActivities), count($activitiesDep));
+        $this->checkArrayEquals($lastOrNextYearActivities, $activityIDs);
       }
       elseif ($caseName == 'activity-of-all-statuses') {
         $this->assertEquals(16, $activityCount);
         $this->assertEquals(16, count($activitiesDep));
       }
     }
+  }
+
+  /**
+   * @dataProvider getActivityDateData
+   */
+  public function testActivityRelativeDateFilter($params, $expected) {
+    $thisYear = date('Y');
+    $dates = [
+      date('Y-m-d', strtotime(($thisYear - 1) . '-01-01')),
+      date('Y-m-d', strtotime(($thisYear - 1) . '-12-31')),
+      date('Y-m-d', strtotime($thisYear . '-01-01')),
+      date('Y-m-d', strtotime($thisYear . '-12-31')),
+      date('Y-m-d', strtotime(($thisYear + 1) . '-01-01')),
+      date('Y-m-d', strtotime(($thisYear + 1) . '-12-31')),
+    ];
+    foreach ($dates as $date) {
+      $this->activityCreate(['activity_date_time' => $date]);
+    }
+    $activitiesDep = CRM_Activity_BAO_Activity::deprecatedGetActivities($params);
+    $activityCount = CRM_Activity_BAO_Activity::deprecatedGetActivitiesCount($params);
+    $this->assertEquals(count($activitiesDep), $activityCount);
+    foreach ($activitiesDep as $activity) {
+      $this->assertTrue(strtotime($activity['activity_date_time']) >= $expected['earliest'], $activity['activity_date_time'] . ' should be no earlier than ' . date('Y-m-d H:i:s', $expected['earliest']));
+      $this->assertTrue(strtotime($activity['activity_date_time']) < $expected['latest'], $activity['activity_date_time'] . ' should be before ' . date('Y-m-d H:i:s', $expected['latest']));
+    }
+
+  }
+
+  /**
+   * Get activity date data.
+   *
+   * Later we might migrate rework the rest of
+   * testByActivityDateAndStatus
+   * to use data provider methodology as it's way complex!
+   *
+   * @return array
+   */
+  public function getActivityDateData() {
+    return [
+      'last-year-activity' => [
+        'params' => [
+          'contact_id' => 1,
+          'admin' => TRUE,
+          'caseId' => NULL,
+          'context' => 'activity',
+          'activity_date_relative' => 'previous.year',
+          'activity_type_id' => NULL,
+          'offset' => 0,
+          'rowCount' => 0,
+          'sort' => NULL,
+        ],
+        'expected' => [
+          'count' => 2,
+          'earliest' => strtotime('first day of january last year'),
+          'latest' => strtotime('first day of january this year'),
+        ]
+      ],
+    ];
   }
 
   /**
@@ -974,6 +1023,7 @@ class CRM_Activity_BAO_ActivityTest extends CiviUnitTestCase {
       'caseId' => NULL,
       'context' => 'home',
       'activity_type_id' => NULL,
+      'activity_status_id' => CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'status_id', 'Scheduled'), // for dashlet the Scheduled status is set by default
       'offset' => 0,
       'rowCount' => 0,
       'sort' => NULL,
@@ -1083,6 +1133,25 @@ $text
     );
     $activity = $this->civicrm_api('activity', 'getsingle', array('id' => $activity_id, 'version' => $this->_apiversion));
     $this->assertEquals($activity['campaign_id'], $campaign_id, 'Activity campaign_id does not match.');
+  }
+
+  /**
+   * @expectedException CRM_Core_Exception
+   * @expectedExceptionMessage You do not have the 'send SMS' permission
+   */
+  public function testSendSMSWithoutPermission() {
+    $dummy = NULL;
+    $session = CRM_Core_Session::singleton();
+    $config = &CRM_Core_Config::singleton();
+    $config->userPermissionClass->permissions = array('access CiviCRM');
+
+    CRM_Activity_BAO_Activity::sendSMS(
+      $dummy,
+      $dummy,
+      $dummy,
+      $dummy,
+      $session->get('userID')
+    );
   }
 
 }

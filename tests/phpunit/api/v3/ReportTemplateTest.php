@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -188,7 +188,6 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
   public static function getReportTemplates() {
     $reportsToSkip = array(
       'activity' => 'does not respect function signature on from clause',
-      'contribute/topDonor' => 'construction of query in postProcess makes inaccessible ',
       'event/income' => 'I do no understand why but error is Call to undefined method CRM_Report_Form_Event_Income::from() in CRM/Report/Form.php on line 2120',
       'logging/contact/summary' => '(likely to be test related) probably logging off Undefined index: Form/Contact/LoggingSummary.php(231): PHP',
       'logging/contribute/summary' => '(likely to be test related) probably logging off DB Error: no such table',
@@ -215,7 +214,28 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
    * These templates require minimal data config.
    */
   public static function getContributionReportTemplates() {
-    return array(array('contribute/summary'), array('contribute/detail'), array('contribute/repeat'), array('contribute/topDonor'));
+    return array(array('contribute/summary'), array('contribute/detail'), array('contribute/repeat'), array('topDonor' => 'contribute/topDonor'));
+  }
+
+  /**
+   * Get contribution templates that work with basic filter tests.
+   *
+   * These templates require minimal data config.
+   */
+  public static function getMembershipReportTemplates() {
+    return array(array('member/detail'));
+  }
+
+  public static function getMembershipAndContributionReportTemplatesForGroupTests() {
+    $templates = array_merge(self::getContributionReportTemplates(), self::getMembershipReportTemplates());
+    foreach ($templates as $key => $value) {
+      if (array_key_exists('topDonor', $value)) {
+        // Report is not standard enough to test here.
+        unset($templates[$key]);
+      }
+
+    }
+    return $templates;
   }
 
   /**
@@ -282,6 +302,15 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
     ));
 
     $this->assertEquals(2, $rows['count'], "Report failed - the sql used to generate the results was " . print_r($rows['metadata']['sql'], TRUE));
+
+    $this->assertContains('DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci
+      SELECT SQL_CALC_FOUND_ROWS contact_civireport.id as cid  FROM civicrm_contact contact_civireport    INNER JOIN civicrm_contribution contribution_civireport USE index (received_date) ON contribution_civireport.contact_id = contact_civireport.id
+         AND contribution_civireport.is_test = 0
+         AND contribution_civireport.receive_date BETWEEN \'20140701000000\' AND \'20150630235959\'
+       
+       LEFT JOIN civicrm_contribution cont_exclude ON cont_exclude.contact_id = contact_civireport.id
+         AND cont_exclude.receive_date BETWEEN \'2015-7-1\' AND \'20160630235959\' WHERE cont_exclude.id IS NULL AND 1 AND ( contribution_civireport.contribution_status_id IN (1) )
+      GROUP BY contact_civireport.id', $rows['metadata']['sql'][0]);
   }
 
   /**
@@ -312,23 +341,32 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
 
   /**
    * Test the group filter works on the contribution summary (with a smart group).
+   *
+   * @dataProvider getMembershipAndContributionReportTemplatesForGroupTests
+   *
+   * @param string $template
+   *   Name of the template to test.
    */
-  public function testContributionSummaryWithSmartGroupFilter() {
+  public function testContributionSummaryWithSmartGroupFilter($template) {
     $groupID = $this->setUpPopulatedSmartGroup();
     $rows = $this->callAPISuccess('report_template', 'getrows', array(
-      'report_id' => 'contribute/summary',
+      'report_id' => $template,
       'gid_value' => $groupID,
       'gid_op' => 'in',
       'options' => array('metadata' => array('sql')),
     ));
-    $this->assertEquals(3, $rows['values'][0]['civicrm_contribution_total_amount_count']);
-
+    $this->assertNumberOfContactsInResult(3, $rows, $template);
+    if ($template === 'contribute/summary') {
+      $this->assertEquals(3, $rows['values'][0]['civicrm_contribution_total_amount_count']);
+    }
   }
 
   /**
-   * Test the group filter works on the contribution summary (with a smart group).
+   * Test the group filter works on the contribution summary.
+   *
+   * @dataProvider getMembershipAndContributionReportTemplatesForGroupTests
    */
-  public function testContributionSummaryWithNotINSmartGroupFilter() {
+  public function testContributionSummaryWithNotINSmartGroupFilter($template) {
     $groupID = $this->setUpPopulatedSmartGroup();
     $rows = $this->callAPISuccess('report_template', 'getrows', array(
       'report_id' => 'contribute/summary',
@@ -341,14 +379,14 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
   }
 
   /**
-   * Test the group filter works on the contribution summary (with a smart group).
+   * Test the group filter works on the various reports.
    *
-   * @dataProvider getContributionReportTemplates
+   * @dataProvider getMembershipAndContributionReportTemplatesForGroupTests
    *
    * @param string $template
    *   Report template unique identifier.
    */
-  public function testContributionSummaryWithNonSmartGroupFilter($template) {
+  public function testReportsWithNonSmartGroupFilter($template) {
     $groupID = $this->setUpPopulatedGroup();
     $rows = $this->callAPISuccess('report_template', 'getrows', array(
       'report_id' => $template,
@@ -467,6 +505,7 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
     ));
     foreach (array($household1ID, $individual1ID, $householdID, $individualID, $individualIDRemoved) as $contactID) {
       $this->contributionCreate(array('contact_id' => $contactID, 'invoice_id' => '', 'trxn_id' => ''));
+      $this->contactMembershipCreate(array('contact_id' => $contactID));
     }
 
     // Refresh the cache for test purposes. It would be better to alter to alter the GroupContact add function to add contacts to the cache.
@@ -475,12 +514,9 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
   }
 
   /**
-   * Set up a smart group for testing.
+   * Set up a static group for testing.
    *
-   * The smart group includes all Households by filter. In addition an individual
-   * is created and hard-added and an individual is created that is not added.
-   *
-   * One household is hard-added as well as being in the filter.
+   * An individual is created and hard-added and an individual is created that is not added.
    *
    * This gives us a range of scenarios for testing contacts are included only once
    * whenever they are hard-added or in the criteria.
@@ -507,6 +543,7 @@ class api_v3_ReportTemplateTest extends CiviUnitTestCase {
 
     foreach (array($individual1ID, $individualID, $individualIDRemoved) as $contactID) {
       $this->contributionCreate(array('contact_id' => $contactID, 'invoice_id' => '', 'trxn_id' => ''));
+      $this->contactMembershipCreate(array('contact_id' => $contactID));
     }
 
     // Refresh the cache for test purposes. It would be better to alter to alter the GroupContact add function to add contacts to the cache.

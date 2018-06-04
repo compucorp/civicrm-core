@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -268,6 +268,7 @@ class CRM_Financial_BAO_FinancialTypeTest extends CiviUnitTestCase {
       'contact_id' => $contactId,
       'financial_type_id' => 1,
       'contribution_status_id' => 1,
+      'skipCleanMoney' => TRUE,
     );
 
     foreach ($priceFields['values'] as $key => $priceField) {

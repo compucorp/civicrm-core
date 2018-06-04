@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 4.7                                                |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2017                                |
+ | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -430,6 +430,17 @@ class api_v3_UtilsTest extends CiviUnitTestCase {
       'b' => array('id' => 'b', 'fruit' => 'grape'),
       'c' => array('id' => 'c', 'fruit' => 'apple'),
     ), $r3['values']);
+  }
+
+  /**
+   * CRM-20892 Add Tests of new timestamp checking function
+   */
+  public function testTimeStampChecking() {
+    CRM_Core_DAO::executeQuery("INSERT INTO civicrm_mailing (id, modified_date) VALUES (25, '2016-06-30 12:52:52')");
+    $this->assertTrue(_civicrm_api3_compare_timestamps('2017-02-15 16:00:00', 25, 'Mailing'));
+    $this->callAPISuccess('Mailing', 'create', array('id' => 25, 'subject' => 'Test Subject'));
+    $this->assertFalse(_civicrm_api3_compare_timestamps('2017-02-15 16:00:00', 25, 'Mailing'));
+    $this->callAPISuccess('Mailing', 'delete', array('id' => 25));
   }
 
 }

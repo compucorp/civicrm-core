@@ -1001,6 +1001,33 @@ class api_v3_ContactTest extends CiviUnitTestCase {
   }
 
   /**
+   * Test retrieval by addressee id.
+   */
+  public function testGetByAddresseeID() {
+    $individual1ID = $this->individualCreate([
+      'skip_greeting_processing' => 1,
+      'addressee_id' => 'null',
+      'email_greeting_id' => 'null',
+      'postal_greeting_id' => 'null'
+    ]);
+    $individual2ID = $this->individualCreate();
+
+    $this->assertEquals($individual1ID,
+      $this->callAPISuccessGetValue('Contact', ['contact_type' => 'Individual', 'addressee_id' => ['IS NULL' => 1], 'return' => 'id'])
+    );
+    $this->assertEquals($individual1ID,
+      $this->callAPISuccessGetValue('Contact', ['contact_type' => 'Individual', 'email_greeting_id' => ['IS NULL' => 1], 'return' => 'id'])
+    );
+    $this->assertEquals($individual1ID,
+      $this->callAPISuccessGetValue('Contact', ['contact_type' => 'Individual', 'postal_greeting_id' => ['IS NULL' => 1], 'return' => 'id'])
+    );
+
+    $this->assertEquals($individual2ID,
+      $this->callAPISuccessGetValue('Contact', ['contact_type' => 'Individual', 'addressee_id' => ['NOT NULL' => 1], 'return' => 'id'])
+    );
+  }
+
+  /**
    * Check with complete array + custom field.
    *
    * Note that the test is written on purpose without any
@@ -1158,6 +1185,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'invoice_id' => 67990,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.website.create' => array(
         'url' => "http://civicrm.org",
@@ -1199,6 +1227,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'invoice_id' => 67890,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.website.create' => array(
         array(
@@ -1490,6 +1519,76 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     );
     $actual->addTable('civicrm_contact');
     $expected->matches($actual);
+  }
+
+  /**
+   * Test merging 2 organizations.
+   *
+   * CRM-20421: This test make sure that inherited memberships are deleted upon merging organization.
+   */
+  public function testMergeOrganizations() {
+    $organizationID1 = $this->organizationCreate(array(), 0);
+    $organizationID2 = $this->organizationCreate(array(), 1);
+    $contact = $this->callAPISuccess('contact', 'create', array_merge($this->_params, array(
+        'employer_id' => $organizationID1,
+      )
+    ));
+    $contact = $contact["values"][$contact["id"]];
+
+    $membershipType = $this->createEmployerOfMembership();
+    $membershipParams = array(
+      'membership_type_id' => $membershipType["id"],
+      'contact_id' => $organizationID1,
+      'start_date' => "01/01/2015",
+      'join_date' => "01/01/2010",
+      'end_date' => "12/31/2015",
+    );
+    $ownermembershipid = $this->contactMembershipCreate($membershipParams);
+
+    $contactmembership = $this->callAPISuccess("membership", "getsingle", array(
+      "contact_id" => $contact["id"],
+    ));
+
+    $this->assertEquals($ownermembershipid, $contactmembership["owner_membership_id"], "Contact membership must be inherited from Organization");
+
+    CRM_Dedupe_Merger::moveAllBelongings($organizationID2, $organizationID1, array(
+      "move_rel_table_memberships"   => "0",
+      "move_rel_table_relationships" => "1",
+      "main_details" => array(
+        "contact_id"   => $organizationID2,
+        "contact_type" => "Organization",
+      ),
+      "other_details" => array(
+        "contact_id"   => $organizationID1,
+        "contact_type" => "Organization",
+      ),
+    ));
+
+    $contactmembership = $this->callAPISuccess("membership", "get", array(
+      "contact_id" => $contact["id"],
+    ));
+
+    $this->assertEquals(0, $contactmembership["count"], "Contact membership must be deleted after merging organization without memberships.");
+  }
+
+  private function createEmployerOfMembership() {
+    $params = array(
+      'domain_id' => CRM_Core_Config::domainID(),
+      'name' => 'Organization Membership',
+      'description' => NULL,
+      'member_of_contact_id' => 1,
+      'financial_type_id' => 1,
+      'minimum_fee' => 10,
+      'duration_unit' => 'year',
+      'duration_interval' => 1,
+      'period_type' => 'rolling',
+      'relationship_type_id' => 5,
+      'relationship_direction' => 'b_a',
+      'visibility' => 'Public',
+      'is_active' => 1,
+    );
+    $membershipType = $this->callAPISuccess('membership_type', 'create', $params);
+    return $membershipType["values"][$membershipType["id"]];
   }
 
   /**
@@ -2186,6 +2285,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'net_amount' => 90.00,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.contribution.create.1' => array(
         'receive_date' => '2011-01-01',
@@ -2197,6 +2297,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'net_amount' => 90.00,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.website.create' => array(
         array(
@@ -2254,6 +2355,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'invoice_id' => 67890,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.contribution.create.1' => array(
         'receive_date' => '2011-01-01',
@@ -2267,6 +2369,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
         'invoice_id' => 67830,
         'source' => 'SSF',
         'contribution_status_id' => 1,
+        'skipCleanMoney' => 1,
       ),
       'api.website.create' => array(
         array(
@@ -2358,6 +2461,21 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $params = array('id' => 500, 'format.is_success' => 1);
     $result = $this->callAPIAndDocument('Contact', 'Create', $params, __FUNCTION__, __FILE__, $description, $subfile);
     $this->assertEquals(0, $result);
+  }
+
+  /**
+   * Test long display names.
+   *
+   * CRM-21258
+   */
+  public function testContactCreateLongDisplayName() {
+    $result = $this->callAPISuccess('Contact', 'Create', array(
+      'first_name' => str_pad('a', 64, 'a'),
+      'last_name' => str_pad('a', 64, 'a'),
+      'contact_type' => 'Individual',
+    ));
+    $this->assertEquals('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $result['values'][$result['id']]['display_name']);
+    $this->assertEquals('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $result['values'][$result['id']]['sort_name']);
   }
 
   /**
@@ -3509,6 +3627,34 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $this->callAPISuccess('contact', 'delete', array('id' => $created_contact_id, 'skip_undelete' => TRUE));
   }
 
+  /**
+   * Test the prox_distance functionality works.
+   *
+   * This is primarily testing functionality in the BAO_Query object that 'happens to be'
+   * accessible via the api.
+   */
+  public function testContactGetProximity() {
+    CRM_Core_Config::singleton()->geocodeMethod = 'CRM_Utils_MockGeocoder';
+    $this->individualCreate();
+    $contactID = $this->individualCreate();
+    $this->callAPISuccess('Address', 'create', [
+      'contact_id' => $contactID,
+      'is_primary' => 1,
+      'city' => 'Whangarei',
+      'street_address' => 'Dent St',
+      'geo_code_1' => '-35.8743325',
+      'geo_code_2' => '174.4567136',
+      'location_type_id' => 'Home',
+    ]);
+    $contact = $this->callAPISuccess('Contact', 'get', [
+      'prox_distance' => 100,
+      'prox_geo_code_1' => '-35.72192',
+      'prox_geo_code_2' => '174.32034',
+    ]);
+    $this->assertEquals(1, $contact['count']);
+    $this->assertEquals($contactID, $contact['id']);
+  }
+
   public function testLoggedInUserAPISupportToken() {
     $description = "Get contact id of the current logged in user";
     $subFile = "ContactIDOfLoggedInUserContactAPI";
@@ -3531,6 +3677,90 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     CRM_Core_DAO::executeQuery("UPDATE civicrm_group SET cache_date = '2017-01-01'");
     // Reset so it does not skip.
     Civi::$statics['CRM_Contact_BAO_GroupContactCache']['is_refresh_init'] = FALSE;
+  }
+
+  /**
+   * CRM-21041 Test if 'communication style' is set to site default if not passed.
+   */
+  public function testCreateCommunicationStyleUnset() {
+    $this->callAPISuccess('Contact', 'create', array(
+      'first_name' => 'John',
+      'last_name' => 'Doe',
+      'contact_type' => 'Individual')
+    );
+    $result = $this->callAPISuccessGetSingle('Contact', array('last_name' => 'Doe'));
+    $this->assertEquals(1, $result['communication_style_id']);
+  }
+
+  /**
+   * CRM-21041 Test if 'communication style' is set if value is passed.
+   */
+  public function testCreateCommunicationStylePassed() {
+    $this->callAPISuccess('Contact', 'create', array(
+      'first_name' => 'John',
+      'last_name' => 'Doe',
+      'contact_type' => 'Individual',
+      'communication_style_id' => 'Familiar',
+    ));
+    $result = $this->callAPISuccessGetSingle('Contact', array('last_name' => 'Doe'));
+    $params = array(
+      'option_group_id' => 'communication_style',
+      'label' => 'Familiar',
+      'return' => 'value',
+    );
+    $optionResult = civicrm_api3('OptionValue', 'get', $params);
+    $communicationStyle = reset($optionResult['values']);
+    $this->assertEquals($communicationStyle['value'], $result['communication_style_id']);
+  }
+
+  /**
+   * Test that creating a contact with various contact greetings works.
+   */
+  public function testContactGreetingsCreate() {
+    $contact = $this->callAPISuccess('Contact', 'create', array('first_name' => 'Alan', 'last_name' => 'MouseMouse', 'contact_type' => 'Individual'));
+    $contact = $this->callAPISuccessGetSingle('Contact', array('id' => $contact['id'], 'return' => 'postal_greeting'));
+    $this->assertEquals('Dear Alan', $contact['postal_greeting_display']);
+
+    $contact = $this->callAPISuccess('Contact', 'create', array('id' => $contact['id'], 'postal_greeting_id' => 2));
+    $contact = $this->callAPISuccessGetSingle('Contact', array('id' => $contact['id'], 'return' => 'postal_greeting'));
+    $this->assertEquals('Dear Alan MouseMouse', $contact['postal_greeting_display']);
+
+    $contact = $this->callAPISuccess('Contact', 'create', array('organization_name' => 'Alan\'s Show', 'contact_type' => 'Organization'));
+    $contact = $this->callAPISuccessGetSingle('Contact', array('id' => $contact['id'], 'return' => 'postal_greeting, addressee, email_greeting'));
+    $this->assertEquals('', $contact['postal_greeting_display']);
+    $this->assertEquals('', $contact['email_greeting_display']);
+    $this->assertEquals('Alan\'s Show', $contact['addressee_display']);
+  }
+
+  /**
+   * Test that creating a contact with various contact greetings works.
+   */
+  public function testContactGreetingsCreateWithCustomField() {
+    $ids = $this->entityCustomGroupWithSingleFieldCreate(__FUNCTION__, __FILE__);
+    $contact = $this->callAPISuccess('Contact', 'create', array('first_name' => 'Alan', 'contact_type' => 'Individual', 'custom_' . $ids['custom_field_id'] => 'Mice'));
+
+    // Change postal greeting to involve a custom field.
+    $postalOption = $this->callAPISuccessGetSingle('OptionValue', array('option_group_id' => 'postal_greeting', 'filter' => 1, 'is_default' => 1));
+    $this->callAPISuccess('OptionValue', 'create', array(
+      'id' => $postalOption['id'],
+      'name' => 'Dear {contact.first_name} {contact.custom_' . $ids['custom_field_id'] . '}',
+      'label' => 'Dear {contact.first_name} {contact.custom_' . $ids['custom_field_id'] . '}',
+    ));
+
+    // Update contact & see if postal greeting now reflects the new string.
+    $this->callAPISuccess('Contact', 'create', array('id' => $contact['id'], 'last_name' => 'MouseyMousey'));
+    $contact = $this->callAPISuccessGetSingle('Contact', array('id' => $contact['id'], 'return' => 'postal_greeting'));
+    $this->assertEquals('Dear Alan Mice', $contact['postal_greeting_display']);
+
+    // Set contact to have no postal greeting & check it is correct.
+    $this->callAPISuccess('Contact', 'create', array('id' => $contact['id'], 'postal_greeting_id' => 'null'));
+    $contact = $this->callAPISuccessGetSingle('Contact', array('id' => $contact['id'], 'return' => 'postal_greeting'));
+    $this->assertEquals('', $contact['postal_greeting_display']);
+
+    //Cleanup
+    $this->callAPISuccess('OptionValue', 'create', array('id' => $postalOption['id'], 'name' => 'Dear {contact.first_name}'));
+    $this->customFieldDelete($ids['custom_field_id']);
+    $this->customGroupDelete($ids['custom_group_id']);
   }
 
 }

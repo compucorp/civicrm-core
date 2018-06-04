@@ -86,6 +86,32 @@ class api_v3_MailingTest extends CiviUnitTestCase {
   }
 
   /**
+   * Tes that the parameter _skip_evil_bao_auto_schedule_ is respected & prevents jobs being created.
+   */
+  public function testSkipAutoSchedule() {
+    $this->callAPISuccess('Mailing', 'create', array_merge($this->_params, [
+      '_skip_evil_bao_auto_schedule_' => TRUE,
+      'scheduled_date' => 'now'
+    ]));
+    $this->callAPISuccessGetCount('Mailing', [], 1);
+    $this->callAPISuccessGetCount('MailingJob', [], 0);
+  }
+
+  /**
+   * Create a completed mailing (e.g when importing from a provider).
+   */
+  public function testMailerCreateCompleted() {
+    $this->_params['body_html'] = 'I am completed so it does not matter if there is an opt out link since I have already been sent by another system';
+    $this->_params['is_completed'] = 1;
+    $result = $this->callAPIAndDocument('mailing', 'create', $this->_params + array('scheduled_date' => 'now'), __FUNCTION__, __FILE__);
+    $jobs = $this->callAPISuccess('mailing_job', 'get', array('mailing_id' => $result['id']));
+    $this->assertEquals(1, $jobs['count']);
+    $this->assertEquals('Complete', $jobs['values'][$jobs['id']]['status']);
+    unset($this->_params['created_id']); // return isn't working on this in getAndCheck so lets not check it for now
+    $this->getAndCheck($this->_params, $result['id'], 'mailing');
+  }
+
+  /**
    * Per CRM-20316 the mailing should still create without created_id (not mandatory).
    */
   public function testMailerCreateSuccessNoCreatedID() {
@@ -274,7 +300,6 @@ class api_v3_MailingTest extends CiviUnitTestCase {
     $params['mailings']['include'] = array();
     $params['mailings']['exclude'] = array();
     $params['options']['force_rollback'] = 1;
-    $params['api.mailing_job.create'] = 1;
     $params['api.MailingRecipients.get'] = array(
       'mailing_id' => '$value.id',
       'api.contact.getvalue' => array(
@@ -288,12 +313,10 @@ class api_v3_MailingTest extends CiviUnitTestCase {
 
     $maxIDs = array(
       'mailing' => CRM_Core_DAO::singleValueQuery('SELECT MAX(id) FROM civicrm_mailing'),
-      'job' => CRM_Core_DAO::singleValueQuery('SELECT MAX(id) FROM civicrm_mailing_job'),
       'group' => CRM_Core_DAO::singleValueQuery('SELECT MAX(id) FROM civicrm_mailing_group'),
     );
     $create = $this->callAPIAndDocument('Mailing', 'create', $params, __FUNCTION__, __FILE__);
     $this->assertDBQuery($maxIDs['mailing'], 'SELECT MAX(id) FROM civicrm_mailing'); // 'Preview should not create any mailing records'
-    $this->assertDBQuery($maxIDs['job'], 'SELECT MAX(id) FROM civicrm_mailing_job'); // 'Preview should not create any mailing_job record'
     $this->assertDBQuery($maxIDs['group'], 'SELECT MAX(id) FROM civicrm_mailing_group'); // 'Preview should not create any mailing_group records'
 
     $preview = $create['values'][$create['id']]['api.MailingRecipients.get'];
@@ -305,7 +328,10 @@ class api_v3_MailingTest extends CiviUnitTestCase {
     $this->assertTrue((bool) preg_match('/Includer Person/', $previewNames[0]), "Name 'Includer Person' should appear in '" . $previewNames[0] . '"');
   }
 
-  public function testMailerPreviewRecipientsDeduplicate() {
+  /**
+   * Test if Mailing recipients include duplicate OR on_hold emails
+   */
+  public function testMailerPreviewRecipientsDeduplicateAndOnholdEmails() {
     // BEGIN SAMPLE DATA
     $groupIDs['grp'] = $this->groupCreate(array('name' => 'Example group', 'title' => 'Example group'));
     $contactIDs['include_me'] = $this->individualCreate(array(
@@ -318,6 +344,21 @@ class api_v3_MailingTest extends CiviUnitTestCase {
         'first_name' => 'IncluderDuplicate',
         'last_name' => 'Person',
       ));
+
+    $contactIDs['include_me_onhold'] = $this->individualCreate(array(
+        'email' => 'onholdinclude.me@example.org',
+        'first_name' => 'Onhold',
+        'last_name' => 'Person',
+      ));
+    $emailId = $this->callAPISuccessGetValue('Email', array(
+      'return' => 'id',
+      'contact_id' => $contactIDs['include_me_onhold'],
+    ));
+    $this->callAPISuccess('Email', 'create', array(
+      'id' => $emailId,
+      'on_hold' => TRUE,
+    ));
+
     $this->callAPISuccess('GroupContact', 'create', array(
         'group_id' => $groupIDs['grp'],
         'contact_id' => $contactIDs['include_me'],
@@ -326,13 +367,16 @@ class api_v3_MailingTest extends CiviUnitTestCase {
         'group_id' => $groupIDs['grp'],
         'contact_id' => $contactIDs['include_me_duplicate'],
       ));
+    $this->callAPISuccess('GroupContact', 'create', array(
+        'group_id' => $groupIDs['grp'],
+        'contact_id' => $contactIDs['include_me_onhold'],
+      ));
 
     $params = $this->_params;
     $params['groups']['include'] = array($groupIDs['grp']);
     $params['mailings']['include'] = array();
     $params['options']['force_rollback'] = 1;
     $params['dedupe_email'] = 1;
-    $params['api.mailing_job.create'] = 1;
     $params['api.MailingRecipients.get'] = array(
       'mailing_id' => '$value.id',
       'api.contact.getvalue' => array(
@@ -346,6 +390,7 @@ class api_v3_MailingTest extends CiviUnitTestCase {
 
     $create = $this->callAPISuccess('Mailing', 'create', $params);
 
+    //Recipient should not contain duplicate or on_hold emails.
     $preview = $create['values'][$create['id']]['api.MailingRecipients.get'];
     $this->assertEquals(1, $preview['count']);
     $previewEmails = array_values(CRM_Utils_Array::collect('api.email.getvalue', $preview['values']));
@@ -640,6 +685,9 @@ SELECT event_queue_id, time_stamp FROM mail_{$type}_temp";
       'Opened' => 20,
       'Unique Clicks' => 0,
       'Unsubscribers' => 20,
+      'delivered_rate' => '80%',
+      'opened_rate' => '25%',
+      'clickthrough_rate' => '0%',
     );
     $this->checkArrayEquals($expectedResult, $result['values'][$mail['id']]);
   }
@@ -877,6 +925,20 @@ SELECT event_queue_id, time_stamp FROM mail_{$type}_temp";
 
     $url = CRM_Mailing_Event_BAO_TrackableURLOpen::track($dao->queue_id, $dao->url_id);
     $this->assertContains($unicodeURL, $url);
+  }
+
+  /**
+   * CRM-20892 : Test if Mail.create API throws error on update,
+   *  if modified_date less then the date when the mail was last updated/created
+   */
+  public function testModifiedDateMismatchOnMailingUpdate() {
+    $mail = $this->callAPISuccess('mailing', 'create', $this->_params + array('modified_date' => 'now'));
+    try {
+      $this->callAPISuccess('mailing', 'create', $this->_params + array('id' => $mail['id'], 'modified_date' => '2 seconds ago'));
+    }
+    catch (Exception $e) {
+      $this->assertRegExp("/Failure in api call for mailing create:  Mailing has not been saved, Content maybe out of date, please refresh the page and try again/", $e->getMessage());
+    }
   }
 
 }

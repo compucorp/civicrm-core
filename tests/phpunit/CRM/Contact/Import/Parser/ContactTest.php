@@ -3,7 +3,7 @@
 +--------------------------------------------------------------------+
 | CiviCRM version 4.7                                                |
 +--------------------------------------------------------------------+
-| Copyright CiviCRM LLC (c) 2004-2017                                |
+| Copyright CiviCRM LLC (c) 2004-2018                                |
 +--------------------------------------------------------------------+
 | This file is a part of CiviCRM.                                    |
 |                                                                    |
@@ -44,6 +44,75 @@ class CRM_Contact_Imports_Parser_ContactTest extends CiviUnitTestCase {
    */
   public function setUp() {
     parent::setUp();
+  }
+
+  /**
+   * Test that import parser will add contact with employee of relationship.
+   *
+   * @throws \Exception
+   */
+  public function testImportParserWtihEmployeeOfRelationship() {
+    $this->organizationCreate(array(
+      "organization_name" => "Agileware",
+      "legal_name"        => "Agileware",
+    ));
+    $contactImportValues = array(
+      "first_name"  => "Alok",
+      "last_name"   => "Patel",
+      "Employee of" => "Agileware",
+    );
+
+    $fields = array_keys($contactImportValues);
+    $values = array_values($contactImportValues);
+    $parser = new CRM_Contact_Import_Parser_Contact($fields, NULL);
+    $parser->_contactType = 'Individual';
+    $parser->init();
+    $this->mapRelationshipFields($fields, $parser->getAllFields());
+
+    $parser = new CRM_Contact_Import_Parser_Contact($fields, NULL, NULL, NULL, array(
+      NULL,
+      NULL,
+      $fields[2],
+    ), array(
+      NULL,
+      NULL,
+      "Organization",
+    ), array(
+      NULL,
+      NULL,
+      "organization_name",
+    ), NULL, NULL, NULL, NULL, NULL);
+
+    $parser->_contactType = 'Individual';
+    $parser->_onDuplicate = CRM_Import_Parser::DUPLICATE_UPDATE;
+    $parser->init();
+
+    $this->assertEquals(CRM_Import_Parser::VALID, $parser->import(CRM_Import_Parser::DUPLICATE_UPDATE, $values), 'Return code from parser import was not as expected');
+    $this->callAPISuccess("Contact", "get", array(
+        "first_name"        => "Alok",
+        "last_name"         => "Patel",
+        "organization_name" => "Agileware",
+    ));
+  }
+
+  /**
+   * Test that import parser will not fail when same external_identifier found of deleted contact.
+   *
+   * @throws \Exception
+   */
+  public function testImportParserWtihDeletedContactExternalIdentifier() {
+    $contactId = $this->individualCreate(array(
+      "external_identifier" => "ext-1",
+    ));
+    CRM_Contact_BAO_Contact::deleteContact($contactId);
+    list($originalValues, $result) = $this->setUpBaseContact(array(
+      'external_identifier' => 'ext-1',
+    ));
+    $originalValues['nick_name'] = 'Old Bill';
+    $this->runImport($originalValues, CRM_Import_Parser::DUPLICATE_UPDATE, CRM_Import_Parser::VALID);
+    $originalValues['id'] = $result['id'];
+    $this->assertEquals('ext-1', $this->callAPISuccessGetValue('Contact', array('id' => $result['id'], 'return' => 'external_identifier')));
+    $this->callAPISuccessGetSingle('Contact', $originalValues);
   }
 
   /**
@@ -302,14 +371,14 @@ class CRM_Contact_Imports_Parser_ContactTest extends CiviUnitTestCase {
     $this->callAPISuccessGetSingle('Contact', $contactValues);
   }
 
- /**
-  * Test the determination of whether a custom field is valid.
-  */
+  /**
+   * Test the determination of whether a custom field is valid.
+   */
   public function testCustomFieldValidation() {
     $errorMessage = array();
     $customGroup = $this->customGroupCreate(array(
       'extends' => 'Contact',
-      'title' => 'ABC'
+      'title' => 'ABC',
     ));
     $customField = $this->customFieldOptionValueCreate($customGroup, 'fieldABC', array('html_type' => 'Multi-Select'));
     $params = array(
@@ -434,6 +503,42 @@ class CRM_Contact_Imports_Parser_ContactTest extends CiviUnitTestCase {
   }
 
   /**
+   * CRM-19888 default country should be used if ambigous.
+   */
+  public function testImportAmbiguousStateCountry() {
+    $countries = CRM_Core_PseudoConstant::country(FALSE, FALSE);
+    $this->callAPISuccess('Setting', 'create', array('countryLimit' => array(array_search('United States', $countries), array_search('Guyana', $countries), array_search('Netherlands', $countries))));
+    $this->callAPISuccess('Setting', 'create', array('provinceLimit' => array(array_search('United States', $countries), array_search('Guyana', $countries), array_search('Netherlands', $countries))));
+    $mapper = array(0 => NULL, 1 => NULL, 2 => 'Primary', 3 => NULL);
+    list($contactValues) = $this->setUpBaseContact();
+    $fields = array_keys($contactValues);
+    $addressValues = array(
+      'street_address' => 'PO Box 2716',
+      'city' => 'Midway',
+      'state_province' => 'UT',
+      'postal_code' => 84049,
+      'country' => 'United States',
+    );
+    $locationTypes = $this->callAPISuccess('Address', 'getoptions', array('field' => 'location_type_id'));
+    $locationTypes = $locationTypes['values'];
+    foreach ($addressValues as $field => $value) {
+      $contactValues['home_' . $field] = $value;
+      $mapper[] = array_search('Home', $locationTypes);
+      $contactValues['work_' . $field] = $value;
+      $mapper[] = array_search('Work', $locationTypes);
+      $fields[] = $field;
+      $fields[] = $field;
+    }
+    $contactValues['work_country'] = '';
+
+    $this->runImport($contactValues, CRM_Import_Parser::DUPLICATE_UPDATE, CRM_Import_Parser::VALID, $mapper, $fields);
+    $addresses = $this->callAPISuccess('Address', 'get', array('contact_id' => array('>' => 2), 'sequential' => 1));
+    $this->assertEquals(2, $addresses['count']);
+    $this->assertEquals(array_search('United States', $countries), $addresses['values'][0]['country_id']);
+    $this->assertEquals(array_search('United States', $countries), $addresses['values'][1]['country_id']);
+  }
+
+  /**
    * Run the import parser.
    *
    * @param array $originalValues
@@ -455,6 +560,19 @@ class CRM_Contact_Imports_Parser_ContactTest extends CiviUnitTestCase {
     $parser->_onDuplicate = $onDuplicateAction;
     $parser->init();
     $this->assertEquals($expectedResult, $parser->import($onDuplicateAction, $values), 'Return code from parser import was not as expected');
+  }
+
+  /**
+   * @param array $fields Array of fields to be imported
+   * @param array $allfields Array of all fields which can be part of import
+   */
+  private function mapRelationshipFields(&$fields, $allfields) {
+    foreach ($allfields as $key => $fieldtocheck) {
+      $elementIndex = array_search($fieldtocheck->_title, $fields);
+      if ($elementIndex !== FALSE) {
+        $fields[$elementIndex] = $key;
+      }
+    }
   }
 
   /**
