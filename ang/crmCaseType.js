@@ -355,6 +355,7 @@
     }
 
     function addActivityToSet(activitySet, activityTypeName) {
+      activitySet.activityTypes = activitySet.activityTypes || [];
       var activity = {
           name: activityTypeName,
           label: $scope.activityTypes[activityTypeName].label,
