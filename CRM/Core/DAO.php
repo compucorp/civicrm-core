@@ -616,6 +616,10 @@ class CRM_Core_DAO extends DB_DataObject {
    */
   public function save($hook = TRUE) {
     $eventID = uniqid();
+    if ($hook) {
+      CRM_Utils_Hook::preSave($this);
+    }
+
     if (!empty($this->id)) {
       if ($hook) {
         $preEvent = new \Civi\Core\DAO\Event\PreUpdate($this);
