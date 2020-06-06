@@ -1268,6 +1268,18 @@ class CRM_Core_BAO_UFGroup extends CRM_Core_DAO_UFGroup {
             }
             $params[$index] = $details->$detailName;
           }
+          elseif ($fieldName == 'email') {
+            $detailId = $detailName . '_id';
+            $emailId = $details->$detailId;
+            $emailPopupUrl = CRM_Utils_System::url('civicrm/activity/email/add', [
+              'action' => 'add',
+              'reset' => '1',
+              'cid' => $cid,
+              'email_id' => $emailId,
+            ], TRUE);
+            $values[$index] = '<a class="crm-popup" href="' . $emailPopupUrl . '">' .
+              $details->$detailName . '</a>';
+          }
           else {
             $values[$index] = $params[$index] = $details->$detailName;
           }
