@@ -3,12 +3,16 @@
 
   angular.module('search').component('crmSearch', {
     bindings: {
-      entity: '='
+      entity: '=',
+      load: '<'
     },
     templateUrl: '~/search/crmSearch.html',
     controller: function($scope, $element, $timeout, crmApi4, dialogService, searchMeta, formatForSelect2) {
       var ts = $scope.ts = CRM.ts(),
         ctrl = this;
+
+      this.DEFAULT_AGGREGATE_FN = 'GROUP_CONCAT';
+
       this.selectedRows = [];
       this.limit = CRM.cache.get('searchPageSize', 30);
       this.page = 1;
@@ -23,7 +27,7 @@
 
       $scope.controls = {};
       $scope.joinTypes = [{k: false, v: ts('Optional')}, {k: true, v: ts('Required')}];
-      $scope.entities = formatForSelect2(CRM.vars.search.schema, 'name', 'title', ['description', 'icon']);
+      $scope.entities = formatForSelect2(CRM.vars.search.schema, 'name', 'titlePlural', ['description', 'icon']);
       this.perm = {
         editGroups: CRM.checkPerm('edit groups')
       };
@@ -40,7 +44,7 @@
           if (entity) {
             joinEntities.push({
               id: link.entity + ' AS ' + link.alias,
-              text: entity.title,
+              text: entity.titlePlural,
               description: '(' + link.alias + ')',
               icon: entity.icon
             });
@@ -74,6 +78,17 @@
         if (!ctrl.params.groupBy[idx]) {
           ctrl.clearParam('groupBy', idx);
         }
+        // Remove aggregate functions when no grouping
+        if (!ctrl.params.groupBy.length) {
+          _.each(ctrl.params.select, function(col, pos) {
+            if (_.contains(col, '(')) {
+              var info = searchMeta.parseExpr(col);
+              if (info.fn.category === 'aggregate') {
+                ctrl.params.select[pos] = info.path + info.suffix;
+              }
+            }
+          });
+        }
       };
 
       /**
@@ -87,6 +102,9 @@
           ctrl.params.orderBy = {};
         }
         ctrl.params.orderBy[col] = dir;
+        if (ctrl.results) {
+          ctrl.refreshPage();
+        }
       };
 
       /**
@@ -130,6 +148,17 @@
         $('.crm-search-results', $element).css('height', '');
       }
 
+      // Ensure all non-grouped columns are aggregated if using GROUP BY
+      function aggregateGroupByColumns() {
+        if (ctrl.params.groupBy.length) {
+          _.each(ctrl.params.select, function(col, pos) {
+            if (!_.contains(col, '(') && ctrl.canAggregate(col)) {
+              ctrl.params.select[pos] = ctrl.DEFAULT_AGGREGATE_FN + '(' + col + ')';
+            }
+          });
+        }
+      }
+
       // Debounced callback for loadResults
       function _loadResultsCallback() {
         // Multiply limit to read 2 pages at once & save ajax requests
@@ -169,7 +198,10 @@
         })
           .finally(function() {
             if (ctrl.debug) {
-              ctrl.debug.params = JSON.stringify(ctrl.params, null, 2);
+              ctrl.debug.params = JSON.stringify(_.extend({version: 4}, ctrl.params), null, 2);
+              if (ctrl.debug.timeIndex) {
+                ctrl.debug.timeIndex = Number.parseFloat(ctrl.debug.timeIndex).toPrecision(2);
+              }
             }
           });
       }
@@ -178,6 +210,7 @@
 
       function loadResults() {
         $scope.loading = true;
+        aggregateGroupByColumns();
         _loadResults();
       }
 
@@ -233,6 +266,10 @@
       };
 
       function onChangeSelect(newSelect, oldSelect) {
+        // When removing a column from SELECT, also remove from ORDER BY
+        _.each(_.difference(_.keys(ctrl.params.orderBy), newSelect), function(col) {
+          delete ctrl.params.orderBy[col];
+        });
         // Re-arranging or removing columns doesn't merit a refresh, only adding columns does
         if (!oldSelect || _.difference(newSelect, oldSelect).length) {
           if (ctrl.autoSearch) {
@@ -241,17 +278,17 @@
             ctrl.stale = true;
           }
         }
-      }
-
-      function onChangeOrderBy() {
-        if (ctrl.results) {
-          ctrl.refreshPage();
+        if (ctrl.load) {
+          ctrl.load.saved = false;
         }
       }
 
       function onChangeFilters() {
         ctrl.stale = true;
         ctrl.selectedRows.length = 0;
+        if (ctrl.load) {
+          ctrl.load.saved = false;
+        }
         if (ctrl.autoSearch) {
           ctrl.refreshAll();
         }
@@ -297,7 +334,7 @@
 
       this.getFieldLabel = function(col) {
         var info = searchMeta.parseExpr(col),
-          label = info.field.title;
+          label = info.field.label;
         if (info.fn) {
           label = '(' + info.fn.title + ') ' + label;
         }
@@ -306,12 +343,12 @@
 
       // Is a column eligible to use an aggregate function?
       this.canAggregate = function(col) {
+        var info = searchMeta.parseExpr(col);
         // If the column is used for a groupBy, no
-        if (ctrl.params.groupBy.indexOf(col) > -1) {
+        if (ctrl.params.groupBy.indexOf(info.path) > -1) {
           return false;
         }
         // If the entity this column belongs to is being grouped by id, then also no
-        var info = searchMeta.parseExpr(col);
         return ctrl.params.groupBy.indexOf(info.prefix + 'id') < 0;
       };
 
@@ -319,11 +356,7 @@
         var info = searchMeta.parseExpr(col),
           key = info.fn ? (info.fn.name + ':' + info.path + info.suffix) : col,
           value = row[key];
-        // Handle grouped results
-        if (info.fn && info.fn.name === 'GROUP_CONCAT' && value) {
-          return formatGroupConcatValues(info, value);
-        }
-        else if (info.fn && info.fn.name === 'COUNT') {
+        if (info.fn && info.fn.name === 'COUNT') {
           return value;
         }
         return formatFieldValue(info.field, value);
@@ -331,26 +364,21 @@
 
       function formatFieldValue(field, value) {
         var type = field.data_type;
+        if (_.isArray(value)) {
+          return _.map(value, function(val) {
+            return formatFieldValue(field, val);
+          }).join(', ');
+        }
         if (value && (type === 'Date' || type === 'Timestamp') && /^\d{4}-\d{2}-\d{2}/.test(value)) {
           return CRM.utils.formatDate(value, null, type === 'Timestamp');
         }
         else if (type === 'Boolean' && typeof value === 'boolean') {
           return value ? ts('Yes') : ts('No');
         }
-        else if (type === 'Money') {
+        else if (type === 'Money' && typeof value === 'number') {
           return CRM.formatMoney(value);
         }
         return value;
-      }
-
-      function formatGroupConcatValues(info, values) {
-        return _.transform(values.split(','), function(result, val) {
-          if (info.field.options && !info.suffix) {
-            result.push(_.result(getOption(info.field, val), 'label'));
-          } else {
-            result.push(formatFieldValue(info.field, val));
-          }
-        }).join(', ');
       }
 
       function getOption(field, value) {
@@ -393,7 +421,7 @@
           return _.transform(searchMeta.getEntity(entityName).fields, function(result, field) {
             var item = {
               id: prefix + field.name + (field.options ? suffix : ''),
-              text: field.title,
+              text: field.label,
               description: field.description
             };
             if (disabledIf(item.id)) {
@@ -405,7 +433,7 @@
 
         var mainEntity = searchMeta.getEntity(ctrl.entity),
           result = [{
-            text: mainEntity.title,
+            text: mainEntity.titlePlural,
             icon: mainEntity.icon,
             children: formatFields(ctrl.entity, '')
           }];
@@ -413,7 +441,7 @@
           var joinName = join[0].split(' AS '),
             joinEntity = searchMeta.getEntity(joinName[0]);
           result.push({
-            text: joinEntity.title + ' (' + joinName[1] + ')',
+            text: joinEntity.titlePlural + ' (' + joinName[1] + ')',
             icon: joinEntity.icon,
             children: formatFields(joinEntity.name, joinName[1] + '.')
           });
@@ -477,7 +505,6 @@
           format: 'json',
           default: {}
         });
-        $scope.$watchCollection('$ctrl.params.orderBy', onChangeOrderBy);
 
         $scope.$bindToRoute({
           expr: '$ctrl.params.where',
@@ -520,30 +547,40 @@
         }
         $scope.$watch('$ctrl.params.having', onChangeFilters, true);
 
+        if (this.load) {
+          this.params = this.load.api_params;
+          $timeout(function() {
+            ctrl.load.saved = true;
+          });
+        }
+
         loadFieldOptions();
       };
 
       $scope.saveGroup = function() {
-        var selectField = ctrl.entity === 'Contact' ? 'id' : 'contact_id';
-        if (ctrl.entity !== 'Contact' && !searchMeta.getField('contact_id')) {
-          CRM.alert(ts('Cannot create smart group from %1.', {1: searchMeta.getEntity(true).title}), ts('Missing contact_id'), 'error', {expires: 5000});
-          return;
-        }
         var model = {
           title: '',
           description: '',
           visibility: 'User and User Admin Only',
           group_type: [],
-          id: null,
-          entity: ctrl.entity,
-          params: angular.extend({}, ctrl.params, {version: 4, select: [selectField]})
+          id: ctrl.load ? ctrl.load.id : null,
+          api_entity: ctrl.entity,
+          api_params: _.cloneDeep(angular.extend({}, ctrl.params, {version: 4}))
         };
-        delete model.params.orderBy;
+        delete model.api_params.orderBy;
+        if (ctrl.load && ctrl.load.api_params && ctrl.load.api_params.select && ctrl.load.api_params.select[0]) {
+          model.api_params.select.unshift(ctrl.load.api_params.select[0]);
+        }
         var options = CRM.utils.adjustDialogDefaults({
           autoOpen: false,
           title: ts('Save smart group')
         });
-        dialogService.open('saveSearchDialog', '~/search/saveSmartGroup.html', model, options);
+        dialogService.open('saveSearchDialog', '~/search/saveSmartGroup.html', model, options)
+          .then(function() {
+            if (ctrl.load) {
+              ctrl.load.saved = true;
+            }
+          });
       };
     }
   });

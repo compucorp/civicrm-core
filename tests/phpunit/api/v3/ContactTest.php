@@ -3968,23 +3968,17 @@ class api_v3_ContactTest extends CiviUnitTestCase {
    */
   public function testMerge() {
     $this->createLoggedInUser();
-    $otherContact = $this->callAPISuccess('contact', 'create', $this->_params);
-    $retainedContact = $this->callAPISuccess('contact', 'create', $this->_params);
-    $this->callAPISuccess('contact', 'merge', [
-      'to_keep_id' => $retainedContact['id'],
-      'to_remove_id' => $otherContact['id'],
-      'auto_flip' => FALSE,
-    ]);
+    $this->ids['contact'][0] = $this->callAPISuccess('Contact', 'create', $this->_params)['id'];
+    $this->ids['contact'][1] = $this->callAPISuccess('Contact', 'create', $this->_params)['id'];
+    $retainedContact = $this->doMerge();
 
-    $contacts = $this->callAPISuccess('contact', 'get', $this->_params);
-    $this->assertEquals($retainedContact['id'], $contacts['id']);
     $activity = $this->callAPISuccess('Activity', 'getsingle', [
       'target_contact_id' => $retainedContact['id'],
       'activity_type_id' => 'Contact Merged',
     ]);
     $this->assertEquals(date('Y-m-d'), date('Y-m-d', strtotime($activity['activity_date_time'])));
     $activity2 = $this->callAPISuccess('Activity', 'getsingle', [
-      'target_contact_id' => $otherContact['id'],
+      'target_contact_id' => $this->ids['contact'][1],
       'activity_type_id' => 'Contact Deleted by Merge',
     ]);
     $this->assertEquals($activity['id'], $activity2['parent_id']);
@@ -4170,6 +4164,30 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $result = $this->callAPIAndDocument('Contact', 'getmergedfrom', ['contact_id' => $this->contactIDs[1]], __FUNCTION__, __FILE__)['values'];
     $mergedContactIds = array_merge(array_diff($this->contactIDs, [$this->contactIDs[1]]));
     $this->assertEquals($mergedContactIds, array_keys($result));
+  }
+
+  /**
+   * Test retrieving merged contacts.
+   *
+   * The goal here is to start with a contact deleted by merged and find out the contact that is the current version of them.
+   *
+   * @throws \CRM_Core_Exception
+   */
+  public function testMergedGetWithPermanentlyDeletedContact() {
+    $this->contactIDs[] = $this->individualCreate();
+    $this->contactIDs[] = $this->individualCreate();
+    $this->contactIDs[] = $this->individualCreate();
+    $this->contactIDs[] = $this->individualCreate();
+
+    // First do an 'unnatural merge' - they 'like to merge into the lowest but this will mean that contact 0 merged to contact [3].
+    // When the batch merge runs.... the new lowest contact is contact[1]. All contacts will merge into that contact,
+    // including contact[3], resulting in only 3 existing at the end. For each contact the correct answer to 'who did I eventually
+    // wind up being should be [1]
+    $this->callAPISuccess('Contact', 'merge', ['to_remove_id' => $this->contactIDs[0], 'to_keep_id' => $this->contactIDs[3]]);
+    $this->callAPISuccess('Contact', 'delete', ['id' => $this->contactIDs[3], 'skip_undelete' => TRUE]);
+    $this->callAPIFailure('Contact', 'getmergedto', ['sequential' => 1, 'contact_id' => $this->contactIDs[0]]);
+    $title = CRM_Contact_Page_View::setTitle($this->contactIDs[0], TRUE);
+    $this->assertContains('civicrm/profile/view&amp;reset=1&amp;gid=7&amp;id=3&amp;snippet=4', $title);
   }
 
   /**

@@ -407,13 +407,15 @@ abstract class AbstractAction implements \ArrayAccess {
       'default' => ['administer CiviCRM'],
     ];
     $action = $this->getActionName();
-    if (isset($permissions[$action])) {
-      return $permissions[$action];
-    }
-    elseif (in_array($action, ['getActions', 'getFields'])) {
-      return $permissions['meta'];
-    }
-    return $permissions['default'];
+    // Map specific action names to more generic versions
+    $map = [
+      'getActions' => 'meta',
+      'getFields' => 'meta',
+      'replace' => 'delete',
+      'save' => 'create',
+    ];
+    $generic = $map[$action] ?? 'default';
+    return $permissions[$action] ?? $permissions[$generic] ?? $permissions['default'];
   }
 
   /**
@@ -494,7 +496,7 @@ abstract class AbstractAction implements \ArrayAccess {
         if ($field) {
           $optionFields[$fieldName] = [
             'val' => $record[$expr],
-            'name' => empty($field['custom_field_id']) ? $field['name'] : 'custom_' . $field['custom_field_id'],
+            'field' => $field,
             'suffix' => substr($expr, $suffix + 1),
             'depends' => $field['input_attrs']['controlField'] ?? NULL,
           ];
@@ -504,11 +506,11 @@ abstract class AbstractAction implements \ArrayAccess {
     }
     // Sort option lookups by dependency, so e.g. country_id is processed first, then state_province_id, then county_id
     uasort($optionFields, function ($a, $b) {
-      return $a['name'] === $b['depends'] ? -1 : 1;
+      return $a['field']['name'] === $b['depends'] ? -1 : 1;
     });
     // Replace pseudoconstants. Note this is a reverse lookup as we are evaluating input not output.
     foreach ($optionFields as $fieldName => $info) {
-      $options = FormattingUtil::getPseudoconstantList($this->_entityName, $info['name'], $info['suffix'], $record, 'create');
+      $options = FormattingUtil::getPseudoconstantList($info['field'], $info['suffix'], $record, 'create');
       $record[$fieldName] = FormattingUtil::replacePseudoconstant($options, $info['val'], TRUE);
     }
   }

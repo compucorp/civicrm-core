@@ -179,7 +179,7 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
     $contribution2 = $this->callAPISuccess('contribution', 'create', $p);
 
     // Now we have 2 - test getcount.
-    $contribution = $this->callAPISuccess('contribution', 'getcount', []);
+    $contribution = $this->callAPISuccess('contribution', 'getcount');
     $this->assertEquals(2, $contribution);
     // Test id only format.
     $contribution = $this->callAPISuccess('contribution', 'get', [
@@ -2098,7 +2098,7 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
   /**
    * Test to ensure mail is sent on chosing pay later
    */
-  public function testpayLater() {
+  public function testPayLater() {
     $mut = new CiviMailUtils($this, TRUE);
     $this->swapMessageTemplateForTestTemplate();
     $this->createLoggedInUser();
@@ -2140,7 +2140,7 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
       'description' => 'Online Contribution: Help Support CiviCRM!',
       'price_set_id' => $priceSet['id'],
     ];
-    $this->callAPISuccess('contribution_page', 'submit', $params);
+    $this->callAPISuccess('ContributionPage', 'submit', $params);
 
     $mut->checkMailLog([
       'is_pay_later:::1',
@@ -3316,16 +3316,17 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
     $mut = new CiviMailUtils($this, TRUE);
     $mut->clearMessages();
     $this->_individualId = $this->createLoggedInUser();
+    // Unset source to test whether one is generated if not set already on the contribution.
+    unset($this->_params['source']);
     $contributionID = $this->createPendingParticipantContribution();
     $this->createJoinedProfile(['entity_id' => $this->_ids['event']['test'], 'entity_table' => 'civicrm_event']);
     $this->createJoinedProfile(['entity_id' => $this->_ids['event']['test'], 'entity_table' => 'civicrm_event', 'weight' => 2], ['name' => 'post_1', 'title' => 'title_post_2', 'frontend_title' => 'public 2']);
     $this->createJoinedProfile(['entity_id' => $this->_ids['event']['test'], 'entity_table' => 'civicrm_event', 'weight' => 3], ['name' => 'post_2', 'title' => 'title_post_3', 'frontend_title' => 'public 3']);
     $this->eliminateUFGroupOne();
 
-    $this->callAPISuccess('contribution', 'completetransaction', [
-      'id' => $contributionID,
-    ]
-    );
+    $this->callAPISuccess('contribution', 'completetransaction', ['id' => $contributionID]);
+    $contribution = $this->callAPISuccessGetSingle('Contribution', ['id' => $contributionID, 'return' => ['contribution_source']]);
+    $this->assertEquals('Online Event Registration: Annual CiviCRM meet', $contribution['contribution_source']);
     $participantStatus = $this->callAPISuccessGetValue('participant', [
       'id' => $this->_ids['participant'],
       'return' => 'participant_status_id',
@@ -3562,17 +3563,12 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
    *
    * @param int $priceFieldValueID
    * @param array $contriParams
+   *
+   * @throws \CRM_Core_Exception
    */
   public function setUpPendingContribution($priceFieldValueID, $contriParams = []) {
     $contactID = $this->individualCreate();
-    $membership = $this->callAPISuccess('membership', 'create', [
-      'contact_id' => $contactID,
-      'membership_type_id' => $this->_ids['membership_type'],
-      'start_date' => 'yesterday - 1 year',
-      'end_date' => 'yesterday',
-      'join_date' => 'yesterday - 1 year',
-    ]);
-    $contribution = $this->callAPISuccess('contribution', 'create', array_merge([
+    $contribution = $this->callAPISuccess('Order', 'create', array_merge([
       'domain_id' => 1,
       'contact_id' => $contactID,
       'receive_date' => date('Ymd'),
@@ -3585,23 +3581,33 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
       'source' => 'SSF',
       'contribution_status_id' => 2,
       'contribution_page_id' => $this->_ids['contribution_page'],
-      'api.membership_payment.create' => ['membership_id' => $membership['id']],
+      'line_items' => [
+        [
+          'line_item' => [
+            [
+              'price_field_id' => $this->_ids['price_field'][0],
+              'qty' => 1,
+              'entity_table' => 'civicrm_membership',
+              'unit_price' => 20,
+              'line_total' => 20,
+              'financial_type_id' => 1,
+              'price_field_value_id' => $priceFieldValueID,
+            ],
+          ],
+          'params' => [
+            'contact_id' => $contactID,
+            'membership_type_id' => $this->_ids['membership_type'],
+            'start_date' => 'yesterday - 1 year',
+            'end_date' => 'yesterday',
+            'join_date' => 'yesterday - 1 year',
+          ],
+        ],
+      ],
     ], $contriParams));
 
-    $this->callAPISuccess('line_item', 'create', [
-      'entity_id' => $contribution['id'],
-      'entity_table' => 'civicrm_contribution',
-      'contribution_id' => $contribution['id'],
-      'price_field_id' => $this->_ids['price_field'][0],
-      'qty' => 1,
-      'unit_price' => 20,
-      'line_total' => 20,
-      'financial_type_id' => 1,
-      'price_field_value_id' => $priceFieldValueID,
-    ]);
     $this->_ids['contact'] = $contactID;
     $this->_ids['contribution'] = $contribution['id'];
-    $this->_ids['membership'] = $membership['id'];
+    $this->_ids['membership'] = $this->callAPISuccessGetValue('MembershipPayment', ['return' => 'membership_id', 'contribution_id' => $contribution['id']]);
   }
 
   /**
@@ -4897,6 +4903,77 @@ class api_v3_ContributionTest extends CiviUnitTestCase {
       'id' => $contributionID,
     ]);
     $this->assertEquals('2020-02-02 00:00:00', $contribution['receive_date']);
+  }
+
+  /**
+   * Make sure that recording a payment with Different Payment Instrument update main contribution record payment
+   * instrument too. If multiple Payment Recorded, last payment record payment (when No more due) instrument set to main
+   * payment
+   */
+  public function testPaymentVerifyPaymentInstrumentChange() {
+    // Create Pending contribution with pay later mode, with payment instrument Check
+    $params = [
+      'contact_id' => $this->_individualId,
+      'total_amount' => 100,
+      'receive_date' => '2020-02-02',
+      'contribution_status_id' => 'Pending',
+      'is_pay_later' => 1,
+      'payment_instrument_id' => 'Check',
+    ];
+    $contributionID = $this->contributionCreate($params);
+
+    // Record the the Payment with instrument other than Check, e.g EFT
+    $paymentParams = [
+      'contribution_id' => $contributionID,
+      'total_amount' => 50,
+      'trxn_date' => '2020-03-04',
+      'payment_instrument_id' => 'EFT',
+    ];
+    $this->callAPISuccess('payment', 'create', $paymentParams);
+
+    $contribution = $this->callAPISuccess('Contribution', 'getSingle', [
+      'id' => $contributionID,
+    ]);
+    // payment status should be 'Partially paid'
+    $this->assertEquals('Partially paid', $contribution['contribution_status']);
+
+    // Record the the Payment with instrument other than Check, e.g Cash (pay all remaining amount)
+    $paymentParams = [
+      'contribution_id' => $contributionID,
+      'total_amount' => 50,
+      'trxn_date' => '2020-03-04',
+      'payment_instrument_id' => 'Cash',
+    ];
+    $this->callAPISuccess('payment', 'create', $paymentParams);
+
+    //check if contribution Payment Instrument (Payment Method) is is set to "Cash".
+    $contribution = $this->callAPISuccess('Contribution', 'getSingle', [
+      'id' => $contributionID,
+    ]);
+    $this->assertEquals('Cash', $contribution['payment_instrument']);
+    $this->assertEquals('Completed', $contribution['contribution_status']);
+  }
+
+  /**
+   * Test the "clean money" functionality.
+   */
+  public function testCleanMoney() {
+    $params = [
+      'contact_id' => $this->_individualId,
+      'financial_type_id' => 1,
+      'total_amount' => '$100',
+      'fee_amount' => '$20',
+      'net_amount' => '$80',
+      'non_deductible_amount' => '$80',
+      'sequential' => 1,
+    ];
+    $id = $this->callAPISuccess('Contribution', 'create', $params)['id'];
+    // Reading the return values of the API isn't reliable here; get the data from the db.
+    $contribution = $this->callAPISuccess('Contribution', 'getsingle', ['id' => $id]);
+    $this->assertEquals('100.00', $contribution['total_amount']);
+    $this->assertEquals('20.00', $contribution['fee_amount']);
+    $this->assertEquals('80.00', $contribution['net_amount']);
+    $this->assertEquals('80.00', $contribution['non_deductible_amount']);
   }
 
 }

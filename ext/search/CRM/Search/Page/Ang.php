@@ -32,7 +32,7 @@ class CRM_Search_Page_Ang extends CRM_Core_Page {
 
     // Add client-side vars for the search UI
     $vars = [
-      'operators' => \CRM_Core_DAO::acceptedSQLOperators(),
+      'operators' => CRM_Utils_Array::makeNonAssociative($this->getOperators()),
       'schema' => $this->schema,
       'links' => $this->getLinks(),
       'loadOptions' => $this->loadOptions,
@@ -42,6 +42,7 @@ class CRM_Search_Page_Ang extends CRM_Core_Page {
 
     Civi::resources()
       ->addPermissions(['edit groups', 'administer reserved groups'])
+      ->addBundle('bootstrap3')
       ->addVars('search', $vars);
 
     // Load angular module
@@ -49,10 +50,33 @@ class CRM_Search_Page_Ang extends CRM_Core_Page {
     $loader->setModules(['search']);
     $loader->setPageName('civicrm/search');
     $loader->useApp([
-      'defaultRoute' => '/Contact',
+      'defaultRoute' => '/create/Contact',
     ]);
     $loader->load();
     parent::run();
+  }
+
+  /**
+   * @return string[]
+   */
+  private function getOperators() {
+    return [
+      '=' => '=',
+      '!=' => '≠',
+      '>' => '>',
+      '<' => '<',
+      '>=' => '≥',
+      '<=' => '≤',
+      'CONTAINS' => ts('Contains'),
+      'IN' => ts('Is In'),
+      'NOT IN' => ts('Not In'),
+      'LIKE' => ts('Is Like'),
+      'NOT LIKE' => ts('Not Like'),
+      'BETWEEN' => ts('Is Between'),
+      'NOT BETWEEN' => ts('Not Between'),
+      'IS NULL' => ts('Is Null'),
+      'IS NOT NULL' => ts('Not Null'),
+    ];
   }
 
   /**
@@ -60,13 +84,13 @@ class CRM_Search_Page_Ang extends CRM_Core_Page {
    */
   private function getSchema() {
     $schema = \Civi\Api4\Entity::get()
-      ->addSelect('name', 'title', 'description', 'icon')
+      ->addSelect('name', 'title', 'titlePlural', 'description', 'icon')
       ->addWhere('name', '!=', 'Entity')
-      ->addOrderBy('title')
+      ->addOrderBy('titlePlural')
       ->setChain([
         'get' => ['$name', 'getActions', ['where' => [['name', '=', 'get']]], ['params']],
       ])->execute();
-    $getFields = ['name', 'title', 'description', 'options', 'input_type', 'input_attrs', 'data_type', 'serialize'];
+    $getFields = ['name', 'label', 'description', 'options', 'input_type', 'input_attrs', 'data_type', 'serialize', 'fk_entity'];
     foreach ($schema as $entity) {
       // Skip if entity doesn't have a 'get' action or the user doesn't have permission to use get
       if ($entity['get']) {
@@ -75,10 +99,12 @@ class CRM_Search_Page_Ang extends CRM_Core_Page {
         if ($loadOptions) {
           $entity['optionsLoaded'] = TRUE;
         }
+        // Because multivalue custom pseudo-entities don't have titlePlural
+        $entity['titlePlural'] = $entity['titlePlural'] ?? $entity['title'];
         $entity['fields'] = civicrm_api4($entity['name'], 'getFields', [
           'select' => $getFields,
           'where' => [['permission', 'IS NULL']],
-          'orderBy' => ['title'],
+          'orderBy' => ['label'],
           'loadOptions' => $loadOptions,
         ]);
         // Get the names of params this entity supports (minus some obvious ones)

@@ -350,7 +350,7 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
    * @param string $type
    * @param string $name
    * @param string $label
-   * @param string|array $attributes (options for select elements)
+   * @param array $attributes (options for select elements)
    * @param bool $required
    * @param array $extra
    *   (attributes for select elements).
@@ -364,10 +364,17 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
    */
   public function &add(
     $type, $name, $label = '',
-    $attributes = '', $required = FALSE, $extra = NULL
+    $attributes = NULL, $required = FALSE, $extra = NULL
   ) {
     if ($type === 'radio') {
       CRM_Core_Error::deprecatedFunctionWarning('CRM_Core_Form::addRadio');
+    }
+
+    if ($attributes && !is_array($attributes)) {
+      // The $attributes param used to allow for strings and would default to an
+      // empty string.  However, now that the variable is heavily manipulated,
+      // we should expect it to always be an array.
+      Civi::log()->warning('Attributes passed to CRM_Core_Form::add() are not an array.', ['civi.tag' => 'deprecated']);
     }
     // Fudge some extra types that quickform doesn't support
     $inputType = $type;
@@ -413,7 +420,7 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
 
       $attributes['data-crm-datepicker'] = json_encode((array) $extra);
       if (!empty($attributes['aria-label']) || $label) {
-        $attributes['aria-label'] = CRM_Utils_Array::value('aria-label', $attributes, $label);
+        $attributes['aria-label'] = $attributes['aria-label'] ?? $label;
       }
       $type = "text";
     }
@@ -429,7 +436,7 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
       // Add placeholder option for select
       if (isset($extra['placeholder'])) {
         if ($extra['placeholder'] === TRUE) {
-          $extra['placeholder'] = $required ? ts('- select -') : ts('- none -');
+          $extra['placeholder'] = ts('- select %1 -', [1 => $label]);
         }
         if (($extra['placeholder'] || $extra['placeholder'] === '') && empty($extra['multiple']) && is_array($attributes) && !isset($attributes[''])) {
           $attributes = ['' => $extra['placeholder']] + $attributes;
@@ -668,6 +675,13 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
 
       $attrs = ['class' => 'crm-form-submit'] + (array) CRM_Utils_Array::value('js', $button);
 
+      // A lot of forms use the hacky method of looking at
+      // `$params['button name']` (dating back to them being inputs with a
+      // "value" of the button label) rather than looking at
+      // `$this->controller->getButtonName()`. It makes sense to give buttons a
+      // value by default as a precaution.
+      $attrs['value'] = 1;
+
       if (!empty($button['class'])) {
         $attrs['class'] .= ' ' . $button['class'];
       }
@@ -686,7 +700,8 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
       }
 
       if ($button['type'] === 'reset') {
-        $prevnext[] = $this->createElement($button['type'], 'reset', $button['name'], $attrs);
+        $attrs['type'] = 'reset';
+        $prevnext[] = $this->createElement('xbutton', 'reset', $button['name'], $attrs);
       }
       else {
         if (!empty($button['subName'])) {
@@ -704,12 +719,11 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
         if (in_array($button['type'], ['next', 'upload', 'done']) && $button['name'] === ts('Save')) {
           $attrs['accesskey'] = 'S';
         }
-        $icon = CRM_Utils_Array::value('icon', $button, $defaultIcon);
-        if ($icon) {
-          $attrs['crm-icon'] = $icon;
-        }
+        $buttonContents = CRM_Core_Page::crmIcon($button['icon'] ?? $defaultIcon) . ' ' . $button['name'];
         $buttonName = $this->getButtonName($button['type'], CRM_Utils_Array::value('subName', $button));
-        $prevnext[] = $this->createElement('submit', $buttonName, $button['name'], $attrs);
+        $attrs['class'] .= " crm-button crm-button-type-{$button['type']} crm-button{$buttonName}";
+        $attrs['type'] = 'submit';
+        $prevnext[] = $this->createElement('xbutton', $buttonName, $buttonContents, $attrs);
       }
       if (!empty($button['isDefault'])) {
         $this->setDefaultAction($button['type']);
@@ -1197,12 +1211,7 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
       $optAttributes = $attributes;
       if (!empty($optionAttributes[$key])) {
         foreach ($optionAttributes[$key] as $optAttr => $optVal) {
-          if (!empty($optAttributes[$optAttr])) {
-            $optAttributes[$optAttr] .= ' ' . $optVal;
-          }
-          else {
-            $optAttributes[$optAttr] = $optVal;
-          }
+          $optAttributes[$optAttr] = ltrim(($optAttributes[$optAttr] ?? '') . ' ' . $optVal);
         }
       }
       // We use a class here to avoid html5 issues with collapsed cutsomfield sets.
@@ -1489,8 +1498,8 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
       $info = civicrm_api3($props['entity'], 'getoptions', $props);
       $options = $info['values'];
     }
-    if (!array_key_exists('placeholder', $props)) {
-      $props['placeholder'] = $required ? ts('- select -') : (CRM_Utils_Array::value('context', $props) == 'search' ? ts('- any -') : ts('- none -'));
+    if (!array_key_exists('placeholder', $props) && $placeholder = self::selectOrAnyPlaceholder($props, $required)) {
+      $props['placeholder'] = $placeholder;
     }
     // Handle custom field
     if (strpos($name, 'custom_') === 0 && is_numeric($name[7])) {
@@ -1523,6 +1532,34 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
     $props['data-api-field'] = $props['field'];
     CRM_Utils_Array::remove($props, 'label', 'entity', 'field', 'option_url', 'options', 'context');
     return $this->add('select', $name, $label, $options, $required, $props);
+  }
+
+  /**
+   * Handles a repeated bit supplying a placeholder for entity selection
+   *
+   * @param string $props
+   *   The field properties, including the entity and context.
+   * @param bool $required
+   *   If the field is required.
+   * @return string
+   *   The placeholder text.
+   */
+  private static function selectOrAnyPlaceholder($props, $required) {
+    if (empty($props['entity'])) {
+      return NULL;
+    }
+    $daoToClass = CRM_Core_DAO_AllCoreTables::daoToClass();
+    if (array_key_exists($props['entity'], $daoToClass)) {
+      $daoClass = $daoToClass[$props['entity']];
+      $tsPlaceholder = $daoClass::getEntityTitle();
+    }
+    else {
+      $tsPlaceholder = ts('option');
+    }
+    if (($props['context'] ?? '') == 'search' && !$required) {
+      return ts('- any %1 -', [1 => $tsPlaceholder]);
+    }
+    return ts('- select %1 -', [1 => $tsPlaceholder]);
   }
 
   /**
@@ -1681,8 +1718,8 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
       case 'Select':
       case 'Select2':
         $props['class'] = CRM_Utils_Array::value('class', $props, 'big') . ' crm-select2';
-        if (!array_key_exists('placeholder', $props)) {
-          $props['placeholder'] = $required ? ts('- select -') : ($context == 'search' ? ts('- any -') : ts('- none -'));
+        if (!array_key_exists('placeholder', $props) && $placeholder = self::selectOrAnyPlaceholder($props, $required)) {
+          $props['placeholder'] = $placeholder;
         }
         // TODO: Add and/or option for fields that store multiple values
         return $this->add(strtolower($widget), $name, $label, $options, $required, $props);
@@ -2052,14 +2089,14 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
   public function addEntityRef($name, $label = '', $props = [], $required = FALSE) {
     // Default properties
     $props['api'] = CRM_Utils_Array::value('api', $props, []);
-    $props['entity'] = CRM_Core_DAO_AllCoreTables::convertEntityNameToCamel(CRM_Utils_Array::value('entity', $props, 'Contact'));
-    $props['class'] = ltrim(CRM_Utils_Array::value('class', $props, '') . ' crm-form-entityref');
+    $props['entity'] = CRM_Core_DAO_AllCoreTables::convertEntityNameToCamel($props['entity'] ?? 'Contact');
+    $props['class'] = ltrim(($props['class'] ?? '') . ' crm-form-entityref');
 
     if (array_key_exists('create', $props) && empty($props['create'])) {
       unset($props['create']);
     }
 
-    $props['placeholder'] = CRM_Utils_Array::value('placeholder', $props, $required ? ts('- select %1 -', [1 => ts(str_replace('_', ' ', $props['entity']))]) : ts('- none -'));
+    $props['placeholder'] = $props['placeholder'] ?? self::selectOrAnyPlaceholder($props, $required);
 
     $defaults = [];
     if (!empty($props['multiple'])) {
@@ -2391,6 +2428,7 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
    * @return HTML_QuickForm_Element
    */
   public function addChainSelect($elementName, $settings = []) {
+    $label = strpos($elementName, 'rovince') ? CRM_Core_DAO_StateProvince::getEntityTitle() : CRM_Core_DAO_County::getEntityTitle();
     $props = $settings += [
       'control_field' => str_replace(['state_province', 'StateProvince', 'county', 'County'], [
         'country',
@@ -2399,12 +2437,12 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
         'StateProvince',
       ], $elementName),
       'data-callback' => strpos($elementName, 'rovince') ? 'civicrm/ajax/jqState' : 'civicrm/ajax/jqCounty',
-      'label' => strpos($elementName, 'rovince') ? ts('State/Province') : ts('County'),
+      'label' => $label,
       'data-empty-prompt' => strpos($elementName, 'rovince') ? ts('Choose country first') : ts('Choose state first'),
       'data-none-prompt' => ts('- N/A -'),
       'multiple' => FALSE,
       'required' => FALSE,
-      'placeholder' => empty($settings['required']) ? ts('- none -') : ts('- select -'),
+      'placeholder' => ts('- select %1 -', [1 => $label]),
     ];
     CRM_Utils_Array::remove($props, 'label', 'required', 'control_field', 'context');
     $props['class'] = (empty($props['class']) ? '' : "{$props['class']} ") . 'crm-select2';
@@ -2448,7 +2486,10 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
         $this->_actionButtonName = $this->getButtonName('next', 'action');
       }
       $this->assign('actionButtonName', $this->_actionButtonName);
-      $this->add('submit', $this->_actionButtonName, ts('Go'), ['class' => 'hiddenElement crm-search-go-button']);
+      $this->add('xbutton', $this->_actionButtonName, ts('Go'), [
+        'type' => 'submit',
+        'class' => 'hiddenElement crm-search-go-button',
+      ]);
 
       // Radio to choose "All items" or "Selected items only"
       $selectedRowsRadio = $this->addElement('radio', 'radio_ts', NULL, '', 'ts_sel', ['checked' => 'checked']);

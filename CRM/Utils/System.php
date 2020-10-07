@@ -511,7 +511,7 @@ class CRM_Utils_System {
     }
 
     self::setHttpHeader('Location', $url);
-    self::civiExit();
+    self::civiExit(0, ['url' => $url, 'context' => 'redirect']);
   }
 
   /**
@@ -1913,6 +1913,13 @@ class CRM_Utils_System {
    */
   public static function sendResponse(\Psr\Http\Message\ResponseInterface $response) {
     $config = CRM_Core_Config::singleton()->userSystem->sendResponse($response);
+  }
+
+  /**
+   * Perform any necessary actions prior to redirecting via POST.
+   */
+  public static function prePostRedirect() {
+    CRM_Core_Config::singleton()->userSystem->prePostRedirect();
   }
 
 }
