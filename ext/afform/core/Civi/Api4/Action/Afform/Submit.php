@@ -10,6 +10,9 @@ use Civi\Afform\Event\AfformSubmitEvent;
  */
 class Submit extends AbstractProcessor {
 
+  /**
+   * @deprecated - You may simply use the event name directly. dev/core#1744
+   */
   const EVENT_NAME = 'civi.afform.submit';
 
   /**
@@ -34,7 +37,7 @@ class Submit extends AbstractProcessor {
     }
 
     $event = new AfformSubmitEvent($this->_formDataModel->getEntities(), $entityValues);
-    \Civi::dispatcher()->dispatch(self::EVENT_NAME, $event);
+    \Civi::dispatcher()->dispatch('civi.afform.submit', $event);
     foreach ($event->entityValues as $entityType => $entities) {
       if (!empty($entities)) {
         throw new \API_Exception(sprintf("Failed to process entities (type=%s; name=%s)", $entityType, implode(',', array_keys($entities))));
