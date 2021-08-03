@@ -195,6 +195,21 @@ class CRM_Financial_BAO_Payment {
     $contributionDAO->id = $contributionID;
     $contributionDAO->find(TRUE);
 
+    if (isset($params['fee_amount'])) {
+      // Update contribution.fee_amount to be be the total of all fees
+      // since the payment is already saved the total here will be right.
+      $payments = civicrm_api3('Payment', 'get', [
+        'contribution_id' => $contributionID,
+        'return' => 'fee_amount',
+      ])['values'];
+      $totalFees = 0;
+      foreach ($payments as $payment) {
+        $totalFees += $payment['fee_amount'] ?? 0;
+      }
+      $contributionDAO->fee_amount = $totalFees;
+      $contributionDAO->net_amount = $contributionDAO->total_amount - $contributionDAO->fee_amount;
+    }
+
     foreach (['trxn_id', 'check_number'] as $fieldName) {
       if (!empty($params[$fieldName])) {
         $values = [];
