@@ -2,7 +2,7 @@ name: Packaging
 on:
   push:
     branches:
-      - 5.35.2-patches
+      - 5.35.2-temp-copy
 
 env:
   base_version: 5.35.2
