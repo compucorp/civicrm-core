@@ -2654,6 +2654,25 @@ class CRM_Core_Form extends HTML_QuickForm_Page {
   }
 
   /**
+   * Get the submitted value of a form field.
+   *
+   * @param array $fieldName
+   *   Form field name.
+   *
+   * @return string
+   *   Submitted value of the form field.
+   */
+  public function getSubmittedValue ($fieldName) {
+    $submittedValue = '';
+
+    if ($this->elementExists($fieldName)) {
+      $submittedValue = $this->getElement($fieldName)->getValue();
+    }
+
+    return $submittedValue;
+  }
+
+  /**
    * Is the form in view or edit mode.
    *
    * The 'addField' function relies on the form action being one of a set list
