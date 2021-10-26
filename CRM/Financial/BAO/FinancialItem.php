@@ -298,6 +298,7 @@ WHERE cc.id IN (' . implode(',', $contactIds) . ') AND con.is_test = 0';
     return [
       'civicrm_line_item' => ts('Line Item'),
       'civicrm_financial_trxn' => ts('Financial Trxn'),
+      'civicrm_contribution_recur' => ts('Recurring Contribution'),
     ];
   }
 

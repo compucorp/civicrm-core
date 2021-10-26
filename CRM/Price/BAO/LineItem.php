@@ -1251,6 +1251,7 @@ WHERE li.contribution_id = %1";
       'civicrm_contribution' => ts('Contribution'),
       'civicrm_participant' => ts('Participant'),
       'civicrm_membership' => ts('Membership'),
+      'civicrm_contribution_recur' => ts('Recurring Contribution'),
     ];
   }
 
