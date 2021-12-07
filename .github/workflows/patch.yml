@@ -22,6 +22,14 @@ jobs:
           mkdir to-be-patched
           wget https://storage.googleapis.com/civicrm/civicrm-stable/${base_version}/${civi_package}
           tar xzf ./${civi_package} -C to-be-patched
+      - name: Ckeditor security upgrade
+        run: |
+          cd ..
+          pwd
+          rm -rf to-be-patched/civicrm/bower_components/ckeditor/
+          wget https://github.com/ckeditor/ckeditor-releases/archive/4.16.2.tar.gz
+          tar xzf 4.16.2.tar.gz
+          mv ckeditor4-releases-4.16.2 to-be-patched/civicrm/bower_components/ckeditor/
       - name: Checkout the fork
         uses: actions/checkout@v2
         with:
