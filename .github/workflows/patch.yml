@@ -36,7 +36,7 @@ jobs:
           cd ..
           rm -rf to-be-patched/civicrm/bower_components/jquery-ui/
           wget https://github.com/civicrm/jqueryui/archive/1.13.1-civicrm.tar.gz
-          tar xzf 1.13.1-civicrm.zip
+          tar xzf 1.13.1-civicrm.tar.gz
           mv jqueryui-1.13.1-civicrm to-be-patched/civicrm/bower_components/jquery-ui/
 
       - name: Checkout the fork
