@@ -39,6 +39,13 @@ jobs:
           tar xzf 1.13.1-civicrm.tar.gz
           mv jqueryui-1.13.1-civicrm to-be-patched/civicrm/bower_components/jquery-ui/
 
+      - name: Apply Dompdf patch "civi-sa-2022-06-dompdf-121"
+        run: |
+          cd ..
+          rm -f to-be-patched/civicrm/vendor/dompdf/dompdf/src/FontMetrics.php
+          wget https://raw.githubusercontent.com/compucorp/civicrm-core/5.39.1-patches/vendor_patches/dompdf/FontMetrics.php
+          mv FontMetrics.php to-be-patched/civicrm/vendor/dompdf/dompdf/src/FontMetrics.php
+
       - name: Checkout the fork
         uses: actions/checkout@v2
         with:
