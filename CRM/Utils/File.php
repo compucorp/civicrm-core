@@ -401,8 +401,9 @@ class CRM_Utils_File {
         unset($extensions['htm']);
       }
     }
+    $restricted = CRM_Utils_Constant::value('CIVICRM_RESTRICTED_UPLOADS', '/(php|php\d|phtml|phar|pl|py|cgi|asp|js|sh|exe|pcgi\d)/i');
     // support lower and uppercase file extensions
-    return (bool) isset($extensions[strtolower($ext)]);
+    return (bool) isset($extensions[strtolower($ext)]) && !preg_match($restricted, strtolower($ext));
   }
 
   /**
