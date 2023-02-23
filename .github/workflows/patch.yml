@@ -42,9 +42,10 @@ jobs:
       - name: Apply Dompdf patch "civi-sa-2022-06-dompdf-121"
         run: |
           cd ..
-          rm -f to-be-patched/civicrm/vendor/dompdf/dompdf/src/FontMetrics.php
-          wget https://raw.githubusercontent.com/compucorp/civicrm-core/5.39.1-patches/vendor_patches/dompdf/FontMetrics.php
-          mv FontMetrics.php to-be-patched/civicrm/vendor/dompdf/dompdf/src/FontMetrics.php
+          rm -rf to-be-patched/civicrm/vendor/dompdf/
+          wget https://github.com/dompdf/dompdf/archive/refs/tags/v2.0.3.tar.gz
+          tar xzf v2.0.3.tar.gz
+          mv dompdf-2.0.3 to-be-patched/civicrm/vendor/dompdf/
 
       - name: Checkout the fork
         uses: actions/checkout@v2
