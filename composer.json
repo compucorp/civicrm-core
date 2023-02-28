@@ -39,12 +39,17 @@
   "config": {
     "platform": {
       "php": "7.2"
+    },
+    "allow-plugins": {
+      "civicrm/composer-compile-plugin": true,
+      "civicrm/composer-downloads-plugin": true,
+      "cweagans/composer-patches": true
     }
   },
   "require": {
     "php": "~7.2",
     "cache/integration-tests": "~0.17.0",
-    "dompdf/dompdf" : "~1.0.0",
+    "dompdf/dompdf" : "~2.0.3",
     "firebase/php-jwt": ">=3 <6",
     "electrolinux/phpquery": "^0.9.6",
     "symfony/config": "~3.0 || ~4.4",

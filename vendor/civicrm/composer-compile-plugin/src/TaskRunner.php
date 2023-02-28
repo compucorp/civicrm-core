@@ -1,4 +1,5 @@
 <?php
+
 namespace Civi\CompilePlugin;
 
 use Civi\CompilePlugin\Event\CompileEvents;
@@ -19,7 +20,6 @@ use Composer\Package\PackageInterface;
 
 class TaskRunner
 {
-
     use ComposerIoTrait {
         __construct as constructComposerIo;
     }
@@ -202,7 +202,7 @@ class TaskRunner
                 }
 
                 $isDryRun = false;
-                $e = new CompileTaskEvent(null, $this->composer, $passthruPolicyFilter, $package, $task, $isDryRun);
+                $e = new CompileTaskEvent('compile-task-' . $task->id, $this->composer, $passthruPolicyFilter, $package, $task, $isDryRun);
                 $this->handlers[$run['type']]->runTask($e, $run['type'], $run['code']);
             }
         } finally {
