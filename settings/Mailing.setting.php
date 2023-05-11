@@ -33,6 +33,28 @@ return [
     'description' => ts('When CiviMail is enabled, users who "subscribe" to a group from a profile Group(s) checkbox will receive a confirmation email. They must respond (opt-in) before they are added to the group.'),
     'help_text' => NULL,
   ],
+  'no_reply_email_address' => [
+    'group_name' => 'Mailing Preferences',
+    'group' => 'mailing',
+    'name' => 'no_reply_email_address',
+    'type' => 'String',
+    'quick_form_type' => 'Select',
+    'html_type' => 'select',
+    'html_attributes' => [
+      'class' => 'crm-select2',
+    ],
+    'default' => NULL,
+    'pseudoconstant' => [
+      'callback' => 'CRM_Admin_Form_Preferences_Mailing::getAvailableFromEmailAddresses',
+    ],
+    'add' => '5.63',
+    'title' => ts('Email From Address to use where a reply is not expected'),
+    'is_domain' => 1,
+    'is_contact' => 0,
+    'description' => '',
+    'help_text' => NULL,
+    'help' => ['id' => 'no_reply_email_address'],
+  ],
   'track_civimail_replies' => [
     'group_name' => 'Mailing Preferences',
     'group' => 'mailing',

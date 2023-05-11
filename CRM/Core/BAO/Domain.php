@@ -370,7 +370,14 @@ class CRM_Core_BAO_Domain extends CRM_Core_DAO_Domain {
    */
   public static function getNoReplyEmailAddress() {
     $emailDomain = CRM_Core_BAO_MailSettings::defaultDomain();
-    return "do-not-reply@$emailDomain";
+    $notReplyEmailAddress = \Civi::settings()->get('no_reply_email_address');
+
+    if (!empty($notReplyEmailAddress)) {
+      $notReplyEmailAddress = CRM_Core_OptionGroup::values('from_email_address', NULL, NULL, NULL, ' AND value = ' . $notReplyEmailAddress);
+      $notReplyEmailAddress = current($notReplyEmailAddress);
+    }
+
+    return $notReplyEmailAddress ?: "do-not-reply@$emailDomain";
   }
 
 }
