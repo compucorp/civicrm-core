@@ -65,7 +65,7 @@
 
 {ts}Amount{/ts}: {$formValues.total_amount|crmMoney}
 {if !empty($receive_date)}
-{ts}Date Received{/ts}: {$receive_date|truncate:10:''|crmDate}
+{ts}Contribution Date{/ts}: {$receive_date|truncate:10:''|crmDate}
 {/if}
 {if !empty($formValues.paidBy)}
 {ts}Paid By{/ts}: {$formValues.paidBy}

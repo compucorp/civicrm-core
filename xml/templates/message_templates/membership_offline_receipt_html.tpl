@@ -185,7 +185,7 @@
               {if !empty($receive_date)}
                 <tr>
                   <td {$labelStyle}>
-                    {ts}Date Received{/ts}
+                    {ts}Contribution Date{/ts}
                   </td>
                   <td {$valueStyle}>
                     {$receive_date|truncate:10:''|crmDate}
