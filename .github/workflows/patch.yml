@@ -2,7 +2,7 @@ name: Packaging
 on:
   push:
    branches: 
-    - 5.51.3-patches
+    - 5.51.3-patches-finance-changes
 
 env:
   base_version: 5.51.3
