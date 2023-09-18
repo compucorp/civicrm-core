@@ -11,7 +11,7 @@
 
 <div class="crm-section crm-socialnetwork alert alert-success status crm-ok" role="alert">
     <h2>{ts}Help spread the word{/ts}</h2>
-    <p>{ts}Please help us and let your friends, colleagues and followers know about our page{/ts}{if $title}: <strong><a href="{$pageURL}">{$title}</a></strong>{else}.{/if}</p>
+    <p>{ts}Please help us and let your friends, colleagues and followers know about our page{/ts}{if $title}: <strong><a href="{$pageURL}">{$title|smarty:nodefaults|purify}</a></strong>{else}.{/if}</p>
     {if $emailMode eq true}
         <a href="https://twitter.com/share?url={$url|escape:'url'}&amp;text={$title|escape:'url'}" class="btn btn-default" role="button" target="_blank">{ts}Tweet{/ts}</a>
         <a href="https://facebook.com/sharer/sharer.php?u={$url|escape:'url'}" target="_blank" class="btn btn-default" role="button">{ts}Share on Facebook{/ts}</a>
