@@ -2,7 +2,7 @@ name: Packaging
 on:
   push:
    branches:
-    - 5.51.3-patches
+    - test-COMCL-346
 
 env:
   base_version: 5.51.3
