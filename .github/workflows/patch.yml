@@ -1,7 +1,7 @@
 name: Packaging
 on:
   push:
-   branches: 
+   branches:
     - 5.51.3-patches
 
 env:
@@ -22,6 +22,13 @@ jobs:
           mkdir to-be-patched
           wget https://storage.googleapis.com/civicrm/civicrm-stable/${base_version}/${civi_package}
           tar xzf ./${civi_package} -C to-be-patched
+
+      - name: Apply KCFINDER XSS patch "CIVI-SA-2023-08"
+        run: |
+          cd ..
+          rm -f to-be-patched/civicrm/packages/kcfinder/core/class/uploader.php
+          wget https://raw.githubusercontent.com/civicrm/civicrm-packages/5.65.1/kcfinder/core/class/uploader.php
+          mv uploader.php to-be-patched/civicrm/packages/kcfinder/core/class/uploader.php
 
       - name: Checkout the fork
         uses: actions/checkout@v2
