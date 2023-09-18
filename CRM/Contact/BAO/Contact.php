@@ -1135,9 +1135,14 @@ WHERE     civicrm_contact.id = " . CRM_Utils_Type::escape($id, 'Integer');
     $cid = CRM_Utils_Request::retrieve('cid', 'Positive');
     // retrieve contact id in case of Profile context
     $id = CRM_Utils_Request::retrieve('id', 'Positive');
+    $formName = $cid ? 'CRM_Contact_Form_Contact' : 'CRM_Profile_Form_Edit';
     $cid = $cid ? $cid : $id;
     if ($action & CRM_Core_Action::DELETE) {
       if (CRM_Utils_Request::retrieve('confirmed', 'Boolean')) {
+        $controller = new CRM_Core_Controller_Simple($formName, ts('New Contact'), NULL, TRUE, FALSE);
+        if (!CRM_Contact_BAO_Contact::_checkAccess('Contact', 'update', ['id' => $cid], NULL)) {
+          CRM_Utils_System::permissionDenied();
+        }
         CRM_Contact_BAO_Contact::deleteContactImage($cid);
         CRM_Core_Session::setStatus(ts('Contact image deleted successfully'), ts('Image Deleted'), 'success');
         $session = CRM_Core_Session::singleton();
