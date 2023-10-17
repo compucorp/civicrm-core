@@ -1264,19 +1264,21 @@ class CRM_Core_BAO_CustomField extends CRM_Core_DAO_CustomField {
         break;
 
       case 'Text':
-        if ($field['data_type'] == 'Money' && isset($value)) {
+        if ($field['data_type'] === 'Money' && isset($value)) {
           // $value can also be an array(while using IN operator from search builder or api).
+          $values = [];
           foreach ((array) $value as $val) {
-            $disp[] = CRM_Utils_Money::formatLocaleNumericRoundedForDefaultCurrency($val);
+            $values[] = $val === '' ? '' : CRM_Utils_Money::formatLocaleNumericRoundedForDefaultCurrency($val);
           }
-          $display = implode(', ', $disp);
+          $display = implode(', ', $values);
         }
-        elseif ($field['data_type'] == 'Float' && isset($value)) {
+        elseif ($field['data_type'] === 'Float' && isset($value)) {
           // $value can also be an array(while using IN operator from search builder or api).
+          $values = [];
           foreach ((array) $value as $val) {
-            $disp[] = CRM_Utils_Number::formatLocaleNumeric($val);
+            $values[] = $val === '' ? '' : CRM_Utils_Number::formatLocaleNumeric($val);
           }
-          $display = implode(', ', $disp);
+          $display = implode(', ', $values);
         }
         break;
     }
