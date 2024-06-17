@@ -73,7 +73,7 @@ jobs:
           echo "Cloning branch $BRANCHNAME from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           git clone -b $BRANCHNAME --depth 1 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git civicrm
           cd civicrm
-          git clone -b 7.x-${{ github.event.inputs.civiver }} --depth 1 https://github.com/compucorp/civicrm-drupal.git drupal
+          git clone -b 7.x-${{ github.event.inputs.civiver }} --depth 1 https://github.com/civicrm/civicrm-drupal.git drupal
           git clone -b ${{ github.event.inputs.civiver }} --depth 1 https://github.com/civicrm/civicrm-packages.git packages
           COMPOSER_MEMORY_LIMIT=-1 composer install
           npm install
