@@ -23,6 +23,13 @@ jobs:
           wget https://storage.googleapis.com/civicrm/civicrm-stable/${base_version}/${civi_package}
           tar xzf ./${civi_package} -C to-be-patched
 
+      - name: Apply PR https://github.com/civicrm/civicrm-drupal/pull/681
+        run: |
+          cd ..
+          rm -f to-be-patched/civicrm/drupal/modules/civicrm_member_roles/civicrm_member_roles.module
+          wget https://raw.githubusercontent.com/compucorp/civicrm-drupal/8037a4c636cf6f918f8c7fde5939febfeafe3143/modules/civicrm_member_roles/civicrm_member_roles.module
+          mv civicrm_member_roles.module to-be-patched/civicrm/drupal/modules/civicrm_member_roles/civicrm_member_roles.module
+
       - name: Apply SMARTY MATH RCE patch "CIVI-SA-2023-07"
         run: |
           cd ..
