@@ -458,4 +458,28 @@ class CRM_Core_Smarty extends Smarty {
     return $value;
   }
 
+  public function getVersion (): int {
+    static $version;
+    if ($version === NULL) {
+      if (class_exists('Smarty\Smarty')) {
+        $version = 5;
+      }
+      else {
+        $class = new ReflectionClass('Smarty');
+        $path = $class->getFileName();
+        if (str_contains($path, 'smarty3')) {
+          $version = 3;
+        }
+        elseif (str_contains($path, 'smarty4')) {
+          $version = 4;
+        }
+        else {
+          $version = 2;
+        }
+      }
+    }
+    return $version;
+
+  }
+
 }
