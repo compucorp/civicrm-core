@@ -213,6 +213,11 @@ class Container {
       []
     ))->setPublic(TRUE);
 
+    $container->setDefinition('civi.smarty.userContent', new Definition(
+      'CRM_Core_Smarty_UserContentPolicy',
+      []
+    ))->setPublic(TRUE);
+
     $container->setDefinition('themes', new Definition(
       'Civi\Core\Themes',
       []
