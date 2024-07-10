@@ -536,6 +536,7 @@ class CRM_Financial_BAO_Payment {
       }
     }
 
+    $isPaymentCompletesContribution = self::isPaymentCompletesContribution($params['contribution_id'], $params['total_amount'], '');
     $items = LineItem::get(FALSE)
       ->addSelect('*', 'financial_item.status_id:name', 'financial_item.id', 'financial_item.financial_account_id', 'financial_item_id.currency', 'financial_item.financial_account_id.is_tax', 'financial_item.entity_id', 'financial_item.amount', 'allocated.amount')
       ->addJoin(
@@ -579,13 +580,30 @@ class CRM_Financial_BAO_Payment {
       }
       else {
         if (empty($item['balance']) && !empty($ratio) && $params['total_amount'] < 0) {
-          $item['allocation'] = $item['item_total'] * $ratio;
+          $item['allocation'] = round($item['item_total'] * $ratio, 2);
+        }
+        elseif ($isPaymentCompletesContribution) {
+          $item['allocation']  = $item['balance'];
         }
         else {
-          $item['allocation'] = $item['balance'] * $ratio;
+          $item['allocation'] = round($item['balance'] * $ratio, 2);
+        }
+
+        if (!empty($item['tax_amount'])) {
+          $item['tax_allocation'] = round($item['tax_amount'] * ($params['total_amount'] / $contribution['total_amount']), 2);
         }
       }
       $payableItems[$payableItemIndex] = $item;
+    }
+
+    if (empty($lineItemOverrides) && !empty($ratio)) {
+      $totalTaxAllocation = array_sum(array_column($payableItems, 'tax_allocation'));
+      $totalAllocation = array_sum(array_column($payableItems, 'allocation'));
+      $total = $totalTaxAllocation + $totalAllocation;
+      $leftPayment = $params['total_amount'] - $total;
+
+      // assign any leftover amount, to the last lineitem
+      $payableItems[$payableItemIndex]['allocation'] += $leftPayment;
     }
 
     return $payableItems;
