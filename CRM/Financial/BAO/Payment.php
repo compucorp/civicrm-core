@@ -596,7 +596,7 @@ class CRM_Financial_BAO_Payment {
       $payableItems[$payableItemIndex] = $item;
     }
 
-    if (empty($lineItemOverrides) && !empty($ratio)) {
+    if (empty($lineItemOverrides) && !empty($ratio) && isset($payableItems[$payableItemIndex])) {
       $totalTaxAllocation = array_sum(array_column($payableItems, 'tax_allocation'));
       $totalAllocation = array_sum(array_column($payableItems, 'allocation'));
       $total = $totalTaxAllocation + $totalAllocation;
