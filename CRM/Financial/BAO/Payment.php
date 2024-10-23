@@ -574,11 +574,10 @@ class CRM_Financial_BAO_Payment {
         else {
           $lineItems[$lineItemID]['allocation'] = round($lineItems[$lineItemID]['balance'] * $ratio, 2);
         }
+      }
 
-        if (!empty($lineItem['tax_amount'])) {
-          $lineItems[$lineItemID]['tax_allocation'] = round($lineItem['tax_amount'] * ($params['total_amount'] / $contribution['total_amount']), 2);
-        }
-
+      if (!empty($lineItem['tax_amount'])) {
+        $lineItems[$lineItemID]['tax_allocation'] = round($lineItem['tax_amount'] * ($params['total_amount'] / $contribution['total_amount']), 2);
       }
     }
 
