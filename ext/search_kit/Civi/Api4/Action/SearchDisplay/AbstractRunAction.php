@@ -77,6 +77,12 @@ abstract class AbstractRunAction extends \Civi\Api4\Generic\AbstractAction {
   private $_afform;
 
   /**
+   * @var array
+   *   Ex: ['civicrm/foo/bar?id=[id]&widget=gizmo' => 'CRMFooBar1234abcd1234abcd']
+   */
+  private $_qfKeys = [];
+
+  /**
    * Override execute method to change the result object type
    * @return \Civi\Api4\Result\SearchDisplayRunResult
    */
@@ -405,9 +411,13 @@ abstract class AbstractRunAction extends \Civi\Api4\Generic\AbstractAction {
       $path = $this->getLinkPath($column['link'], $data, $index);
       $path = $this->replaceTokens($path, $data, 'url', $index);
       if ($path) {
+        $query = [];
+        if (($column['link']['csrf'] ?? NULL) === 'qfKey' && $column['link']['path']) {
+          $query['qfKey'] = $this->getQfKey($column['link']['path']);
+        }
         $link = [
           'text' => $val,
-          'url' => $this->getUrl($path),
+          'url' => $this->getUrl($path, $query),
         ];
         if (!empty($column['link']['target'])) {
           $link['target'] = $column['link']['target'];
@@ -435,9 +445,13 @@ abstract class AbstractRunAction extends \Civi\Api4\Generic\AbstractAction {
       }
       $path = $this->replaceTokens($this->getLinkPath($item, $data), $data, 'url');
       if ($path) {
+        $query = [];
+        if (($item['csrf'] ?? NULL) === 'qfKey' && $item['path']) {
+          $query['qfKey'] = $this->getQfKey($item['path']);
+        }
         $link = [
           'text' => $this->replaceTokens($item['text'] ?? '', $data, 'view'),
-          'url' => $this->getUrl($path),
+          'url' => $this->getUrl($path, $query),
         ];
         foreach (['target', 'style', 'icon'] as $prop) {
           if (!empty($item[$prop])) {
@@ -1258,6 +1272,29 @@ abstract class AbstractRunAction extends \Civi\Api4\Generic\AbstractAction {
         ->setSavedSearch($this->savedSearch)
         ->execute()->first();
     }
+  }
+
+  /**
+   * @param string $pathExpr
+   *   Path formula. Should specify an explicit path.
+   *   Ex: 'civicrm/foo/bar?id=[id]&widget=gizmo`
+   * @return string|null
+   */
+  private function getQfKey(string $pathExpr): ?string {
+    if (isset($this->_qfKeys[$pathExpr])) {
+      // No point re-computing this for 100x links per page-view - same value works.
+      return $this->_qfKeys[$pathExpr];
+    }
+    $result = NULL;
+    if ($routeName = parse_url($pathExpr, PHP_URL_PATH)) {
+      if ($routeItem = \CRM_Core_Menu::get($routeName)) {
+        if (!empty($routeItem['page_callback'])) {
+          $result = \CRM_Core_Key::get($routeItem['page_callback']);
+        }
+      }
+    }
+    $this->_qfKeys[$pathExpr] = $result;
+    return $result;
   }
 
 }
