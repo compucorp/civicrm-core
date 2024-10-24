@@ -71,7 +71,7 @@
     "zetacomponents/base": "1.9.*",
     "zetacomponents/mail": "~1.9.4",
     "marcj/topsort": "~1.1",
-    "phpoffice/phpword": "^0.18.0",
+    "phpoffice/phpword": "^1.2",
     "pear/validate_finance_creditcard": "0.7.0",
     "civicrm/civicrm-cxn-rpc": "~0.20.12.01 || ~0.19.01.10",
     "pear/auth_sasl": "1.2.0",
