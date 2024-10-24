@@ -36,6 +36,7 @@ class CRM_Contact_Page_AJAX {
    * Todo: Migrate contact reference fields to use EntityRef
    */
   public static function contactReference() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $name = $_GET['term'] ?? NULL;
     $name = CRM_Utils_Type::escape($name, 'String');
     $cfID = CRM_Utils_Type::escape($_GET['id'], 'Positive');
@@ -145,6 +146,7 @@ class CRM_Contact_Page_AJAX {
    * Fetch PCP ID by PCP Supporter sort_name, also displays PCP title and associated Contribution Page title
    */
   public static function getPCPList() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $name = $_GET['term'] ?? NULL;
     $name = CRM_Utils_Type::escape($name, 'String');
     $limit = $max = Civi::settings()->get('search_autocomplete_count');
@@ -209,6 +211,7 @@ class CRM_Contact_Page_AJAX {
   }
 
   public static function relationship() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $relType = CRM_Utils_Request::retrieve('rel_type', 'String', CRM_Core_DAO::$_nullObject, TRUE);
     $relContactID = CRM_Utils_Request::retrieve('rel_contact', 'Positive', CRM_Core_DAO::$_nullObject, TRUE);
     $originalCid = CRM_Utils_Request::retrieve('cid', 'Positive');
@@ -279,6 +282,7 @@ class CRM_Contact_Page_AJAX {
   }
 
   public static function groupTree() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     CRM_Utils_System::setHttpHeader('Content-Type', 'application/json');
     $gids = CRM_Utils_Type::escape($_GET['gids'], 'String');
     echo CRM_Contact_BAO_GroupNestingCache::json($gids);
@@ -289,6 +293,7 @@ class CRM_Contact_Page_AJAX {
    * Delete custom value.
    */
   public static function deleteCustomValue() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     CRM_Utils_System::setHttpHeader('Content-Type', 'text/plain');
     $customValueID = CRM_Utils_Type::escape($_REQUEST['valueID'], 'Positive');
     $customGroupID = CRM_Utils_Type::escape($_REQUEST['groupID'], 'Positive');
@@ -311,6 +316,7 @@ class CRM_Contact_Page_AJAX {
    *  check the CMS username.
    */
   public static function checkUserName() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $signer = new CRM_Utils_Signer(CRM_Core_Key::privateKey(), ['for', 'ts']);
     $sig = CRM_Utils_Request::retrieve('sig', 'String');
     $for = CRM_Utils_Request::retrieve('for', 'String');
@@ -350,6 +356,7 @@ class CRM_Contact_Page_AJAX {
    *  Function to get email address of a contact.
    */
   public static function getContactEmail() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $queryStrings = [];
     $name = $_GET['name'] ?? NULL;
     if ($name) {
@@ -461,6 +468,7 @@ LIMIT {$offset}, {$rowCount}
   }
 
   public static function buildSubTypes() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $parent = CRM_Utils_Request::retrieve('parentId', 'Positive');
 
     switch ($parent) {
@@ -483,6 +491,7 @@ LIMIT {$offset}, {$rowCount}
   }
 
   public static function buildDedupeRules() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $parent = CRM_Utils_Request::retrieve('parentId', 'Positive');
 
     switch ($parent) {
@@ -508,6 +517,7 @@ LIMIT {$offset}, {$rowCount}
    * Retrieve signature based on email id.
    */
   public static function getSignature() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $emailID = CRM_Utils_Type::escape($_REQUEST['emailID'], 'Positive');
     $query = "SELECT signature_text, signature_html FROM civicrm_email WHERE id = {$emailID}";
     $dao = CRM_Core_DAO::executeQuery($query);
@@ -527,6 +537,7 @@ LIMIT {$offset}, {$rowCount}
    * Process dupes.
    */
   public static function processDupes() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $oper = CRM_Utils_Type::escape($_REQUEST['op'], 'String');
     $cid = CRM_Utils_Type::escape($_REQUEST['cid'], 'Positive');
     $oid = CRM_Utils_Type::escape($_REQUEST['oid'], 'Positive');
@@ -544,6 +555,7 @@ LIMIT {$offset}, {$rowCount}
    * Retrieve list of duplicate pairs from cache table.
    */
   public static function getDedupes() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $offset    = isset($_REQUEST['start']) ? CRM_Utils_Type::escape($_REQUEST['start'], 'Integer') : 0;
     $rowCount  = isset($_REQUEST['length']) ? CRM_Utils_Type::escape($_REQUEST['length'], 'Integer') : 25;
 
@@ -852,6 +864,7 @@ LIMIT {$offset}, {$rowCount}
    * Retrieve a PDF Page Format for the PDF Letter form.
    */
   public static function pdfFormat() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $formatId = CRM_Utils_Type::escape($_REQUEST['formatId'], 'Integer');
 
     $pdfFormat = CRM_Core_BAO_PdfFormat::getById($formatId);
@@ -863,6 +876,7 @@ LIMIT {$offset}, {$rowCount}
    * Retrieve Paper Size dimensions.
    */
   public static function paperSize() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $paperSizeName = CRM_Utils_Type::escape($_REQUEST['paperSizeName'], 'String');
 
     $paperSize = CRM_Core_BAO_PaperSize::getByName($paperSizeName);
@@ -877,6 +891,7 @@ LIMIT {$offset}, {$rowCount}
    */
   public static function flipDupePairs($prevNextId = NULL) {
     if (!$prevNextId) {
+      CRM_Core_Page_AJAX::validateAjaxRequestMethod();
       // @todo figure out if this is always POST & specify that rather than inexact GET
 
       // We cannot use CRM_Utils_Request::retrieve() because it might be an array.
@@ -897,6 +912,7 @@ LIMIT {$offset}, {$rowCount}
    * Used to store selected contacts across multiple pages in advanced search.
    */
   public static function selectUnselectContacts() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $name = $_REQUEST['name'] ?? NULL;
     $cacheKey = $_REQUEST['qfKey'] ?? NULL;
     $state = CRM_Utils_Array::value('state', $_REQUEST, 'checked');
@@ -945,6 +961,7 @@ LIMIT {$offset}, {$rowCount}
   }
 
   public static function getAddressDisplay() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $contactId = CRM_Utils_Request::retrieve('contact_id', 'Positive');
     if (!$contactId) {
       $addressVal["error_message"] = "no contact id found";
@@ -964,6 +981,7 @@ LIMIT {$offset}, {$rowCount}
    * Mark dupe pairs as selected from un-selected state or vice-versa, in dupe cache table.
    */
   public static function toggleDedupeSelect() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $pnid = $_REQUEST['pnid'];
     $isSelected = CRM_Utils_Type::escape($_REQUEST['is_selected'], 'Boolean');
     $cacheKeyString = CRM_Utils_Request::retrieve('cacheKey', 'Alphanumeric', $null, FALSE);
@@ -997,6 +1015,7 @@ LIMIT {$offset}, {$rowCount}
    * Retrieve contact relationships.
    */
   public static function getContactRelationships() {
+    CRM_Core_Page_AJAX::validateAjaxRequestMethod();
     $contactID = CRM_Utils_Type::escape($_GET['cid'], 'Integer');
     $context = CRM_Utils_Request::retrieve('context', 'Alphanumeric');
     $relationship_type_id = CRM_Utils_Type::escape(CRM_Utils_Array::value('relationship_type_id', $_GET), 'Integer', FALSE);
