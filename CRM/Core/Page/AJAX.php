@@ -40,7 +40,7 @@ class CRM_Core_Page_AJAX {
       $fnName = CRM_Utils_Type::escape($_REQUEST['fn_name'], 'String');
     }
 
-    if (!self::($type, $className, $fnName)) {
+    if (!self::checkAuthz($type, $className, $fnName)) {
       CRM_Utils_System::civiExit();
     }
 
