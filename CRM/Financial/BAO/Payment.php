@@ -588,22 +588,32 @@ class CRM_Financial_BAO_Payment {
         else {
           $item['allocation'] = round($item['balance'] * $ratio, 2);
         }
-
-        if (!empty($item['tax_amount'])) {
-          $item['tax_allocation'] = round($item['tax_amount'] * ($params['total_amount'] / $contribution['total_amount']), 2);
-        }
       }
       $payableItems[$payableItemIndex] = $item;
     }
 
+    // Custom patch to correct roundoff errors 
     if (empty($lineItemOverrides) && !empty($ratio) && isset($payableItems[$payableItemIndex])) {
-      $totalTaxAllocation = array_sum(array_column($payableItems, 'tax_allocation'));
-      $totalAllocation = array_sum(array_column($payableItems, 'allocation'));
+      $totalTaxAllocation = 0;
+      $totalAllocation = 0;
+      $lastNonTaxKey = $payableItemIndex;
+    
+      foreach ($payableItems as $key => $item) {
+        if ($item['financial_item.financial_account_id.is_tax']) {
+          $totalTaxAllocation += $item['allocation'];
+        }
+        else {
+          $totalAllocation += $item['allocation'];
+          $lastNonTaxKey = $key;
+        }
+      }
+      
       $total = $totalTaxAllocation + $totalAllocation;
       $leftPayment = $params['total_amount'] - $total;
-
-      // assign any leftover amount, to the last lineitem
-      $payableItems[$payableItemIndex]['allocation'] += $leftPayment;
+    
+      if ($lastNonTaxKey !== NULL) {
+        $payableItems[$lastNonTaxKey]['allocation'] += $leftPayment;
+      }
     }
 
     return $payableItems;
