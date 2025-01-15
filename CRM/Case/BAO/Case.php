@@ -77,11 +77,11 @@ class CRM_Case_BAO_Case extends CRM_Case_DAO_Case implements \Civi\Core\HookInte
       $matches = [];
       if (!isset($params['case_id'])) {
         $subjectToMatch = $activity->subject ?? '';
-        if (preg_match('/\[case #([0-9a-h]{7})\]/', $subjectToMatch, $matches)) {
+        if (preg_match('/\[.*#([0-9a-h]{7})\]/', $subjectToMatch, $matches)) {
           $key = CRM_Core_DAO::escapeString(CIVICRM_SITE_KEY);
           $query = "SELECT id FROM civicrm_case WHERE SUBSTR(SHA1(CONCAT('$key', id)), 1, 7) = %1";
         }
-        elseif (preg_match('/\[case #(\d+)\]/', $subjectToMatch, $matches)) {
+        elseif (preg_match('/\[.*#(\d+)\]/', $subjectToMatch, $matches)) {
           $query = "SELECT id FROM civicrm_case WHERE id = %1";
         }
       }

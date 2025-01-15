@@ -946,7 +946,7 @@ class CRM_Activity_BAO_Activity extends CRM_Activity_DAO_Activity {
     }
 
     // CRM-5916: strip [case #…] before saving the activity (if present in subject)
-    $activityParams['subject'] = preg_replace('/\[case #([0-9a-h]{7})\] /', '', $activityParams['subject']);
+    $activityParams['subject'] = preg_replace('/\[.*#([0-9a-h]{7})\] /', '', $activityParams['subject']);
 
     // add the attachments to activity params here
     if ($attachments) {

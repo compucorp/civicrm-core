@@ -66,7 +66,7 @@ class CRM_Case_Form_Task_Email extends CRM_Case_Form_Task {
     // CRM-5916: prepend case id hash to CiviCase-originating emails’ subjects
     if ($this->getCaseID()) {
       $hash = substr(sha1(CIVICRM_SITE_KEY . $this->getCaseID()), 0, 7);
-      $subject = "[case #$hash] $subject";
+      $subject = "[#$hash] $subject";
     }
     return $subject;
   }
