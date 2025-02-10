@@ -312,9 +312,9 @@ class CRM_Contribute_BAO_FinancialProcessor {
       // This is an update so original currency if none passed in.
       $params['trxnParams']['currency'] = CRM_Utils_Array::value('currency', $params, $params['prevContribution']->currency);
 
-      $transactionIDs[] = CRM_Contribute_BAO_FinancialProcessor::recordAlwaysAccountsReceivable($params['trxnParams'], $params);
-      if ($isARefund && in_array(NULL, $transactionIDs)) {
-        // Do not create extras transactions when recordAlwaysAccountsReceivable method returns NULL
+      $transactionIDs = [];
+      if ($isARefund) {
+        // Do not create extras transactions for a refund
         // , and let updateFinancialAccounts function do the rest
         return TRUE;
       }
