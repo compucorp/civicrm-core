@@ -312,8 +312,9 @@ class CRM_Contribute_BAO_FinancialProcessor {
       // This is an update so original currency if none passed in.
       $params['trxnParams']['currency'] = CRM_Utils_Array::value('currency', $params, $params['prevContribution']->currency);
 
-      $transactionIDs = [];
-      if ($isARefund) {
+      $transactionIDs[] = CRM_Contribute_BAO_FinancialProcessor::recordAlwaysAccountsReceivable($params['trxnParams'], $params);
+      if ($isARefund && in_array(NULL, $transactionIDs)) {
+        // Do not create extras transactions when recordAlwaysAccountsReceivable method returns NULL
         // Do not create extras transactions for a refund
         // , and let updateFinancialAccounts function do the rest
         return TRUE;
@@ -410,14 +411,33 @@ class CRM_Contribute_BAO_FinancialProcessor {
       $params['status_id'] = array_search('Pending', $contributionStatuses);
     }
     $params['is_payment'] = FALSE;
-    $trxn = CRM_Core_BAO_FinancialTrxn::create($params);
+
+    $trxnId = civicrm_api3('FinancialTrxn', 'get', [
+      'contribution_id' => $params['contribution_id'] ?? NULL,
+      'to_financial_account_id' => $params['to_financial_account_id'] ?? NULL,
+      'total_amount' => $params['total_amount'] ?? NULL,
+      'fee_amount' => $params['fee_amount'] ?? NULL,
+      'net_amount' => $params['net_amount'] ?? NULL,
+      'currency' => $params['currency'] ?? NULL,
+      'status_id' => $params['status_id'] ?? NULL,
+      'is_payment' => FALSE,
+      'sequential' => 1,
+      'options' => ['limit' => 1, 'sort' => 'id desc'],
+    ])['id'] ?? NULL;
+
+    if ($trxnId === NULL) {
+      $trxn = CRM_Core_BAO_FinancialTrxn::create($params);
+      $trxnId = $trxn->id;
+    }
+
     if ($contributionStatus != 'Completed') {
       $trxnParams['from_financial_account_id'] = $arAccountId;
     }
     else {
       $trxnParams['from_financial_account_id'] = $params['to_financial_account_id'];
     }
-    return $trxn->id;
+
+    return $trxnId;
   }
 
   /**
