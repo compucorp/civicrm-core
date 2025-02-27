@@ -412,21 +412,38 @@ class CRM_Contribute_BAO_FinancialProcessor {
     }
     $params['is_payment'] = FALSE;
 
-    $trxnId = civicrm_api3('FinancialTrxn', 'get', [
-      'contribution_id' => $params['contribution_id'] ?? NULL,
-      'to_financial_account_id' => $params['to_financial_account_id'] ?? NULL,
-      'total_amount' => $params['total_amount'] ?? NULL,
-      'fee_amount' => $params['fee_amount'] ?? NULL,
-      'net_amount' => $params['net_amount'] ?? NULL,
-      'currency' => $params['currency'] ?? NULL,
-      'status_id' => $params['status_id'] ?? NULL,
-      'is_payment' => FALSE,
-      'sequential' => 1,
-      'options' => ['limit' => 1, 'sort' => 'id desc'],
-    ])['id'] ?? NULL;
+    if ($params['contribution_id']) {
+      $trxn = \Civi\Api4\EntityFinancialTrxn::get(FALSE)
+        ->addSelect('financial_trxn_id')
+        ->addWhere('entity_id', '=', $params['contribution_id'])
+        ->addWhere('entity_table', '=', 'civicrm_contribution');
 
-    if ($trxnId === NULL) {
-      $trxn = CRM_Core_BAO_FinancialTrxn::create($params);
+      if ($params['to_financial_account_id']) {
+        $trxn->addWhere('financial_trxn_id.to_financial_account_id', '=', $params['to_financial_account_id']);
+      }
+      if ($params['from_financial_account_id']) {
+        $trxn->addWhere('financial_trxn_id.from_financial_account_id', '=', $params['from_financial_account_id']);
+      }
+      if ($params['total_amount']) {
+        $trxn->addWhere('financial_trxn_id.total_amount', '=', $params['total_amount']);
+      }
+      if ($params['currency']) {
+        $trxn->addWhere('financial_trxn_id.currency', '=', $params['currency']);
+      }
+
+      $trxn = $trxn->addWhere('financial_trxn_id.status_id', '=', $params['status_id'])
+        ->addWhere('financial_trxn_id.is_payment', '=', 0)
+        ->execute()
+        ->first();
+
+      $trxnId = $trxn['financial_trxn_id'] ?? null;
+      if ($trxnId === null) {
+        $trxn   = CRM_Core_BAO_FinancialTrxn::create($params);
+        $trxnId = $trxn->id;
+      }
+    }
+    else {
+      $trxn   = CRM_Core_BAO_FinancialTrxn::create($params);
       $trxnId = $trxn->id;
     }
 
