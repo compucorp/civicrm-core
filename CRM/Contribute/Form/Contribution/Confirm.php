@@ -2758,7 +2758,7 @@ class CRM_Contribute_Form_Contribution_Confirm extends CRM_Contribute_Form_Contr
         }
 
         $ids['membership'] = $currentMembership['id'];
-        $membership = CRM_Member_BAO_Membership::create($memParams);
+        $membership = CRM_Member_BAO_Membership::create($memParams, $ids);
         return [$membership, $renewalMode, $dates];
       }
 
