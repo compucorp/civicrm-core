@@ -436,16 +436,13 @@ class CRM_Contribute_BAO_FinancialProcessor {
         ->execute()
         ->first();
 
-      $trxnId = $trxn['financial_trxn_id'] ?? NULL;
-      if ($trxnId === NULL) {
-        $trxn   = CRM_Core_BAO_FinancialTrxn::create($params);
-        $trxnId = $trxn->id;
+      if (!empty($trxn['financial_trxn_id'])) {
+        return NULL;
       }
     }
-    else {
-      $trxn   = CRM_Core_BAO_FinancialTrxn::create($params);
-      $trxnId = $trxn->id;
-    }
+
+    $trxn   = CRM_Core_BAO_FinancialTrxn::create($params);
+    $trxnId = $trxn->id;
 
     if ($contributionStatus != 'Completed') {
       $trxnParams['from_financial_account_id'] = $arAccountId;
