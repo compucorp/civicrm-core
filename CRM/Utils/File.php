@@ -363,10 +363,8 @@ class CRM_Utils_File {
     }
     else {
       require_once 'DB.php';
-      $dsn = CRM_Utils_SQL::autoSwitchDSN($dsn);
       try {
-        $options = CRM_Utils_SQL::isSSLDSN($dsn) ? ['ssl' => TRUE] : [];
-        $db = DB::connect($dsn, $options);
+        $db = CRM_Utils_SQL::connect($dsn);
       }
       catch (Exception $e) {
         die("Cannot open $dsn: " . $e->getMessage());
