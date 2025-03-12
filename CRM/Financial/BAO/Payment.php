@@ -108,6 +108,12 @@ class CRM_Financial_BAO_Payment {
         'trxnParams' => [
           'trxn_date' => $paymentTrxnParams['trxn_date'],
           'currency' => $paymentTrxnParams['currency'],
+          'trxn_id' => isset($paymentTrxnParams['trxn_id']) ? $paymentTrxnParams['trxn_id'] : NULL,
+          'payment_instrument_id' => isset($paymentTrxnParams['payment_instrument_id']) ? $paymentTrxnParams['payment_instrument_id'] : NULL,
+          'check_number' => isset($paymentTrxnParams['check_number']) ? $paymentTrxnParams['check_number'] : NULL,
+          'pan_truncation' => isset($paymentTrxnParams['pan_truncation']) ? $paymentTrxnParams['pan_truncation'] : NULL,
+          'card_type_id' => isset($paymentTrxnParams['card_type_id']) ? $paymentTrxnParams['card_type_id'] : NULL,
+          'payment_processor_id' => isset($paymentTrxnParams['payment_processor_id']) ? $paymentTrxnParams['payment_processor_id'] : NULL,
         ],
       ];
 
@@ -592,12 +598,12 @@ class CRM_Financial_BAO_Payment {
       $payableItems[$payableItemIndex] = $item;
     }
 
-    // Custom patch to correct roundoff errors 
+    // Custom patch to correct roundoff errors
     if (empty($lineItemOverrides) && !empty($ratio) && isset($payableItems[$payableItemIndex])) {
       $totalTaxAllocation = 0;
       $totalAllocation = 0;
       $lastNonTaxKey = $payableItemIndex;
-    
+
       foreach ($payableItems as $key => $item) {
         if ($item['financial_item.financial_account_id.is_tax']) {
           $totalTaxAllocation += $item['allocation'];
@@ -607,10 +613,10 @@ class CRM_Financial_BAO_Payment {
           $lastNonTaxKey = $key;
         }
       }
-      
+
       $total = $totalTaxAllocation + $totalAllocation;
       $leftPayment = $params['total_amount'] - $total;
-    
+
       if ($lastNonTaxKey !== NULL) {
         $payableItems[$lastNonTaxKey]['allocation'] += $leftPayment;
       }
