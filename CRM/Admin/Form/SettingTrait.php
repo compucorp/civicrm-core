@@ -15,6 +15,8 @@
  * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
 
+use Civi\Api4\Setting;
+
 /**
  * This trait allows us to consolidate Preferences & Settings forms.
  *
@@ -356,7 +358,7 @@ trait CRM_Admin_Form_SettingTrait {
         $settings[$setting] = (bool) reset($settings[$setting]);
       }
     }
-    civicrm_api3('setting', 'create', $settings);
+    Setting::set(FALSE)->setValues($settings)->execute();
   }
 
   /**
