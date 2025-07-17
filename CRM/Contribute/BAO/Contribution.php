@@ -4026,6 +4026,11 @@ INNER JOIN civicrm_activity ON civicrm_activity_contact.activity_id = civicrm_ac
           $membershipParams['id'], $changeDate, NULL, $membershipParams['num_terms']
         );
         $dates['join_date'] = $currentMembership['join_date'];
+        // we should only consider the calculated dates if they are greater then membership dates
+        $dates['start_date'] = strtotime($membership['start_date']) > strtotime(CRM_Utils_Date::customFormat($dates['start_date'], '%Y-%m-%d')) ?
+          $membership['start_date'] : $dates['start_date'];
+        $dates['end_date'] = strtotime($membership['end_date']) > strtotime(CRM_Utils_Date::customFormat($dates['end_date'], '%Y-%m-%d')) ?
+          $membership['end_date'] : $dates['end_date'];
       }
       if ('Pending' === CRM_Core_PseudoConstant::getName('CRM_Member_BAO_Membership', 'status_id', $membership['status_id'])) {
         $membershipParams['skipStatusCal'] = '';
