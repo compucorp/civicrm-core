@@ -65,6 +65,23 @@ class CRM_Utils_System {
   }
 
   /**
+   * Respond that permission has been denied.
+   *
+   * @return never
+   *   NOTE: The keyword "never" introduced in PHP 8.1+.
+   *   This is a soft docblock, so we can use it anyway.
+   * @throws \CRM_Core_Exception
+   */
+  public static function permissionDenied() {
+    $userSystem = CRM_Core_Config::singleton()->userSystem;
+    $userSystem->permissionDenied();
+    // The UF-drivers might emit an exception, send a redirect, or print a message.
+    // They sometimes terminate - but not always. Let's ensure that the
+    // termination is consistent.
+    return CRM_Utils_System::civiExit();
+  }
+
+  /**
    * Compose a new URL string from the current URL string.
    *
    * Used by all the framework components, specifically,
@@ -482,9 +499,9 @@ class CRM_Utils_System {
    *   Page title (if different) - may include html
    */
   public static function setTitle($title, $pageTitle = NULL) {
-    self::$title = $title;
+    self::$title = $title = strip_tags($title ?: '');
     $config = CRM_Core_Config::singleton();
-    return $config->userSystem->setTitle(CRM_Utils_String::purifyHtml($title), CRM_Utils_String::purifyHtml($pageTitle));
+    return $config->userSystem->setTitle($title, CRM_Utils_String::purifyHtml($pageTitle));
   }
 
   /**
