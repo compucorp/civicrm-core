@@ -1250,4 +1250,11 @@ abstract class CRM_Utils_System_Base {
     return $profile;
   }
 
+  /**
+   * Handle any caught Exceptions.
+   */
+  public function handleUnhandledException(\Throwable $e) {
+    CRM_Core_Error::handleUnhandledException($e);
+  }
+
 }
