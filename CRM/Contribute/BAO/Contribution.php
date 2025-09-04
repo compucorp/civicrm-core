@@ -972,7 +972,7 @@ class CRM_Contribute_BAO_Contribution extends CRM_Contribute_DAO_Contribution im
     // as they would then me membership.contact_id, membership.is_test etc
     return civicrm_api3('Membership', 'get', [
       'id' => ['IN' => $membershipIDs],
-      'return' => ['id', 'contact_id', 'membership_type_id', 'is_test', 'status_id', 'end_date'],
+      'return' => ['id', 'contact_id', 'membership_type_id', 'is_test', 'status_id', 'end_date', 'start_date'],
     ])['values'];
   }
 
