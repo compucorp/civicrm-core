@@ -275,7 +275,8 @@ class CRM_Contribute_BAO_FinancialProcessor {
       return FALSE;
     }
 
-    if (CRM_Contribute_BAO_FinancialProcessor::isContributionUpdateARefund($params['prevContribution']->contribution_status_id, $params['contribution']->contribution_status_id)) {
+    $isARefund = self::isContributionUpdateARefund($params['prevContribution']->contribution_status_id, $params['contribution']->contribution_status_id);
+    if ($isARefund) {
       // @todo we should stop passing $params by reference - splitting this out would be a step towards that.
       $params['trxnParams']['total_amount'] = -$params['total_amount'];
     }
@@ -296,9 +297,10 @@ class CRM_Contribute_BAO_FinancialProcessor {
       }
     }
 
-    if (($previousContributionStatus === 'Pending'
-        || $previousContributionStatus === 'In Progress')
-      && ($currentContributionStatus === 'Completed')
+    if ((($previousContributionStatus === 'Pending'
+          || $previousContributionStatus === 'In Progress')
+        && ($currentContributionStatus === 'Completed'))
+      || $isARefund
     ) {
       if (empty($params['line_item'])) {
         //CRM-15296
@@ -312,6 +314,12 @@ class CRM_Contribute_BAO_FinancialProcessor {
       $params['trxnParams']['currency'] = $params['currency'] ?? $params['prevContribution']->currency;
 
       $transactionIDs[] = CRM_Contribute_BAO_FinancialProcessor::recordAlwaysAccountsReceivable($params['trxnParams'], $params);
+      if ($isARefund && in_array(NULL, $transactionIDs)) {
+        // Do not create extras transactions when recordAlwaysAccountsReceivable method returns NULL
+        // , and let updateFinancialAccounts function do the rest
+        return TRUE;
+      }
+
       $trxn = CRM_Core_BAO_FinancialTrxn::create($params['trxnParams']);
       // @todo we should stop passing $params by reference - splitting this out would be a step towards that.
       $params['entity_id'] = $transactionIDs[] = $trxn->id;
@@ -361,7 +369,7 @@ class CRM_Contribute_BAO_FinancialProcessor {
   }
 
   /**
-   * Create Accounts Receivable financial trxn entry for Completed Contribution.
+   * Create Accounts Receivable financial trxn entry for Completed, Cancelled and Refunded Contribution..
    *
    * @param array $trxnParams
    *   Financial trxn params
