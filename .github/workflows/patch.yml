@@ -23,6 +23,13 @@ jobs:
           wget https://storage.googleapis.com/civicrm/civicrm-stable/${base_version}/${civi_package}
           tar xzf ./${civi_package} -C to-be-patched
 
+      - name: Apply PR https://github.com/civicrm/civicrm-drupal/pull/692
+        run: |
+          cd ..
+          rm -f to-be-patched/civicrm/drupal/modules/civicrmtheme/civicrmtheme.module
+          wget https://raw.githubusercontent.com/compucorp/civicrm-drupal/66a349a52054c1c1ba515fa135c68c56ed7a5dd7/modules/civicrmtheme/civicrmtheme.module
+          mv civicrmtheme.module to-be-patched/civicrm/drupal/modules/civicrmtheme/civicrmtheme.module
+
       - name: Checkout the fork
         uses: actions/checkout@v2
         with:
