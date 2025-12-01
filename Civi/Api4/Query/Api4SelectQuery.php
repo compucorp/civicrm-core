@@ -624,13 +624,14 @@ class Api4SelectQuery extends Api4Query {
     $this->openJoin['bridgeKey'] = $joinRef->getReferenceKey();
     $this->openJoin['bridgeCondition'] = array_intersect_key($linkConditions, [1 => 1]);
 
+    // Info needed for joining custom fields extending the bridge entity
+    $this->explicitJoins[$alias]['bridge_table_alias'] = $bridgeAlias;
+
     $outerConditions = [];
     foreach (array_filter($joinTree) as $clause) {
       $outerConditions[] = $this->treeWalkClauses($clause, 'ON');
     }
 
-    // Info needed for joining custom fields extending the bridge entity
-    $this->explicitJoins[$alias]['bridge_table_alias'] = $bridgeAlias;
     // Invert the join so all nested joins will link to the bridge entity
     $this->openJoin['table'] = $bridgeTable;
     $this->openJoin['alias'] = $bridgeAlias;
@@ -917,7 +918,7 @@ class Api4SelectQuery extends Api4Query {
    */
   private function addJoin(string $side, string $tableName, string $tableAlias, string $baseTableAlias, array $conditions): void {
     // If this join is based off the current open join, incorporate it
-    if ($baseTableAlias === ($this->openJoin['alias'] ?? NULL)) {
+    if ($baseTableAlias === ($this->openJoin['alias'] ?? NULL) || $baseTableAlias === ($this->openJoin['bridgeAlias'] ?? NULL)) {
       $this->openJoin['subjoins'][] = [
         'table' => $tableName,
         'alias' => $tableAlias,
