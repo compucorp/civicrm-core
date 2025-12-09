@@ -1474,7 +1474,7 @@ class CRM_Financial_BAO_Order {
     $contributionValues['amount_level'] = $this->getAmountLevel();
     $contributionValues['contribution_status_id:name'] = 'Pending';
     $contributionValues['line_item'] = [$this->getLineItems()];
-    return Contribution::create()
+    return Contribution::create(FALSE)
       ->setValues($contributionValues)->execute();
   }
 
@@ -1521,7 +1521,10 @@ class CRM_Financial_BAO_Order {
       // Nothing to save.
       return $entityValues['id'];
     }
-    return civicrm_api4($entity, 'save', ['records' => [$entityValues]])->first()['id'];
+    return civicrm_api4($entity, 'save', [
+      'records' => [$entityValues],
+      'checkPermissions' => FALSE,
+    ])->first()['id'];
   }
 
 }
