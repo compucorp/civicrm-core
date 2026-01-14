@@ -2003,7 +2003,8 @@ class CRM_Contribute_Form_Contribution extends CRM_Contribute_Form_AbstractEditP
 
     if (!$this->getSubmittedValue('price_set_id') && !empty($submittedValues['total_amount']) && $this->getContributionID() && $pId) {
       $participantIds = CRM_Event_BAO_Participant::getParticipantIds($this->_id, TRUE);
-      $fee = CRM_Utils_Money::format($submittedValues['total_amount'] / count($participantIds), null, null, true);
+      $totalAmount = $this->_params['total_amount'] ?: $submittedValues['total_amount'];
+      $fee = CRM_Utils_Money::format($totalAmount / count($participantIds), null, null, true);
       foreach ($participantIds as $participantId) {
         $participantParams = [
           'fee_amount' => $fee,
