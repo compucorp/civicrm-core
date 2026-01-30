@@ -617,7 +617,7 @@ class CRM_Financial_BAO_Payment {
       $total = $totalTaxAllocation + $totalAllocation;
       $leftPayment = $params['total_amount'] - $total;
 
-      if ($lastNonTaxKey !== NULL) {
+      if ($lastNonTaxKey !== NULL && $leftPayment > 0) {
         $payableItems[$lastNonTaxKey]['allocation'] += $leftPayment;
       }
     }
