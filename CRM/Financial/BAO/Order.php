@@ -82,7 +82,7 @@ class CRM_Financial_BAO_Order {
 
   private $isExcludeExpiredFields = FALSE;
 
-  private array $contributionValues;
+  private array $contributionValues = [];
 
   /**
    * @param bool $isExcludeExpiredFields
@@ -1187,6 +1187,7 @@ class CRM_Financial_BAO_Order {
       $lineItem['tax_rate'] = $this->getTaxRate($lineItem['financial_type_id']);
       $lineItem['tax_amount'] = ($lineItem['tax_rate'] / 100) * $lineItem['line_total'];
       $lineItem['line_total_inclusive'] = $lineItem['tax_amount'] + $lineItem['line_total'];
+      $this->applyCurrencyRounding($lineItem);
     }
     if (!empty($lineItem['membership_type_id'])) {
       $lineItem['entity_table'] = 'civicrm_membership';
@@ -1525,6 +1526,18 @@ class CRM_Financial_BAO_Order {
       'records' => [$entityValues],
       'checkPermissions' => FALSE,
     ])->first()['id'];
+  }
+
+  /**
+   * Apply currency rounding so that tax + net always equals the inclusive amount.
+   *
+   * @param array $lineItem
+   */
+  private function applyCurrencyRounding(array &$lineItem): void {
+    $precision = CRM_Utils_Money::getCurrencyPrecision($this->contributionValues['currency'] ?? CRM_Core_Config::singleton()->defaultCurrency);
+    $lineItem['line_total_inclusive'] = round((float) ($lineItem['line_total_inclusive'] ?? 0.0), $precision);
+    $lineItem['line_total'] = round((float) ($lineItem['line_total'] ?? 0.0), $precision);
+    $lineItem['tax_amount'] = round($lineItem['line_total_inclusive'] - $lineItem['line_total'], $precision);
   }
 
 }
