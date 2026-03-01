@@ -46,7 +46,7 @@ class CRM_Price_BAO_LineItem extends CRM_Price_DAO_LineItem {
         $params['unit_price'] = 0;
       }
     }
-    if (!isset($params['tax_amount']) && isset($params['financial_type_id'], $params['line_total'])) {
+    if (isset($params['financial_type_id'], $params['line_total'])) {
       $params['tax_amount'] = self::getTaxAmountForLineItem($params);
     }
 
