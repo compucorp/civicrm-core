@@ -300,6 +300,7 @@
           }
         });
         delete params.scheduled_date;
+        delete params.scheduled_id;
         delete params.recipients; // the content was merged in
         return qApi('Mailing', 'create', params).then(function (recipResult) {
           // changes rolled back, so we don't care about updating mailing
@@ -333,6 +334,7 @@
             crmMailingCache.put('mailing-' + mailing.id + '-recipient-params', params.recipients);
           }
           delete params.scheduled_date;
+          delete params.scheduled_id;
           delete params.recipients; // the content was merged in
           recipientCount = qApi('Mailing', 'create', params).then(function (recipResult) {
             // changes rolled back, so we don't care about updating mailing
@@ -365,6 +367,7 @@
         // as an *intent* to schedule and creates tertiary records. Saving a draft with a scheduled_date
         // is therefore not allowed. Remove this after fixing Mailing.create's contract.
         delete params.scheduled_date;
+        delete params.scheduled_id;
 
         delete params.jobs;
 
@@ -418,6 +421,7 @@
         // as an *intent* to schedule and creates tertiary records. Saving a draft with a scheduled_date
         // is therefore not allowed. Remove this after fixing Mailing.create's contract.
         delete params.scheduled_date;
+        delete params.scheduled_id;
 
         delete params.jobs;
 
