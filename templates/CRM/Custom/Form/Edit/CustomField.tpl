@@ -11,7 +11,7 @@
 {if $element.help_pre}
   <tr class="custom_field-help-pre-row {$element.element_name}-row-help-pre">
     <td>&nbsp;</td>
-    <td class="html-adjust description">{$element.help_pre}</td>
+    <td class="html-adjust description">{$element.help_pre|escape}</td>
   </tr>
 {/if}
 {if $element.html_type === 'Hidden'}
@@ -21,7 +21,7 @@
   </tr>
 {elseif $element.options_per_line}
   <tr class="custom_field-row {$element.element_name}-row">
-    <td class="label">{$formElement.label}{if $element.help_post}{help id=$element.id file="CRM/Custom/Form/CustomField.hlp" title=$element.label}{/if}</td>
+    <td class="label">{$formElement.label}{if $element.help_post}{help id=$element.id file="CRM/Custom/Form/CustomField.hlp" title=$element.label|escape}{/if}</td>
     <td class="html-adjust">
       {assign var="count" value=1}
       {foreach name=outer key=key item=item from=$formElement}
@@ -46,7 +46,7 @@
 {else}
   <tr class="custom_field-row {$element.element_name}-row">
     <td class="label">{$formElement.label}
-      {if $element.help_post}{help id=$element.id file="CRM/Custom/Form/CustomField.hlp" title=$element.label}{/if}
+      {if $element.help_post}{help id=$element.id file="CRM/Custom/Form/CustomField.hlp" title=$element.label|escape}{/if}
     </td>
     <td class="html-adjust">
       {$formElement.html}&nbsp;
