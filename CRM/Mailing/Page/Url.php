@@ -33,7 +33,7 @@ class CRM_Mailing_Page_Url extends CRM_Core_Page {
     $queue_id = CRM_Utils_Request::retrieveValue('qid', 'Integer');
     $url_id = CRM_Utils_Request::retrieveValue('u', 'Integer');
     if (!$url_id) {
-      CRM_Utils_System::sendInvalidRequestResponse(ts("Missing input parameters"));
+      CRM_Utils_System::sendResponse(new GuzzleHttp\Psr7\Response(400, [], ts('Missing input parameters')));
     }
     $url = trim(CRM_Mailing_Event_BAO_MailingEventTrackableURLOpen::track($queue_id, $url_id));
     $query_string = $this->extractPassthroughParameters();
