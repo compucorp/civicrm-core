@@ -35,7 +35,8 @@ class CRM_Mailing_Page_Url extends CRM_Core_Page {
     if (!$url_id) {
       CRM_Utils_System::sendInvalidRequestResponse(ts("Missing input parameters"));
     }
-    $url = trim(CRM_Mailing_Event_BAO_MailingEventTrackableURLOpen::track($queue_id, $url_id));
+    $isHead = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD';
+    $url = trim(CRM_Mailing_Event_BAO_MailingEventTrackableURLOpen::track($isHead ? NULL : $queue_id, $url_id));
     $query_string = $this->extractPassthroughParameters();
 
     if (strlen($query_string) > 0) {
