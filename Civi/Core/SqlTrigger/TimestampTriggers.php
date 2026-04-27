@@ -300,11 +300,25 @@ class TimestampTriggers {
 
     if ($this->getCustomDataEntity()) {
       $customGroups = \CRM_Core_BAO_CustomGroup::getAll(['extends' => $this->getCustomDataEntity(), 'is_multiple' => FALSE]);
-      foreach ($customGroups as $customGroup) {
-        $relations[] = [
-          'table' => $customGroup['table_name'],
-          'column' => 'entity_id',
-        ];
+      if ($customGroups) {
+        // Batch-check which backing tables exist (single query) to guard
+        // against orphaned civicrm_custom_group records whose table was dropped.
+        $tableNames = array_column($customGroups, 'table_name');
+        $escaped = implode("', '", array_map(['\CRM_Core_DAO', 'escapeString'], $tableNames));
+        $existingTables = [];
+        $dao = \CRM_Core_DAO::executeQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('$escaped')");
+        while ($dao->fetch()) {
+          $existingTables[$dao->TABLE_NAME] = TRUE;
+        }
+        foreach ($customGroups as $customGroup) {
+          if (!isset($existingTables[$customGroup['table_name']])) {
+            continue;
+          }
+          $relations[] = [
+            'table' => $customGroup['table_name'],
+            'column' => 'entity_id',
+          ];
+        }
       }
     }
 
