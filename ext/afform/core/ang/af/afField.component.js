@@ -291,6 +291,21 @@
         var currentVal = $scope.dataProvider.getFieldData()[ctrl.fieldName];
         // Setter
         if (arguments.length) {
+          // A single Boolean CheckBox transitioning from checked (true) to unchecked in a
+          // search filter context means "remove filter" (null), not "filter for false".
+          // Guards explained:
+          //   - isUserUnchecking: currentVal === true ensures this is a user action, not
+          //     programmatic init from URL params or afform_default where false may be intentional.
+          //   - isSingleBooleanCheckbox: multi-value checkbox lists use checklist-model, not getSetValue.
+          //   - isSearchFilterContext: no af-form ancestor (search filter, not a save form where
+          //     false must persist to DB); no search_operator (field stores value directly,
+          //     not via an operator-keyed object).
+          var isUserUnchecking = val === false && currentVal === true;
+          var isSingleBooleanCheckbox = ctrl.defn.input_type === 'CheckBox' && !ctrl.isMultiple();
+          var isSearchFilterContext = !ctrl.afFieldset.afFormCtrl && !ctrl.search_operator;
+          if (isUserUnchecking && isSingleBooleanCheckbox && isSearchFilterContext) {
+            val = null;
+          }
           if (ctrl.search_operator) {
             if (typeof currentVal !== 'object') {
               $scope.dataProvider.getFieldData()[ctrl.fieldName] = {};
