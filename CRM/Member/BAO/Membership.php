@@ -1828,6 +1828,12 @@ INNER JOIN  civicrm_contact contact ON ( contact.id = membership.contact_id AND 
    *   premonth_owner, month_owner, year_owner, current_owner, total_owner.
    */
   public static function getMembershipSummaryStats($membershipTypeIds, $preMonth, $preMonthEnd, $monthStart, $yearStart, $ymd, $current, $isTest = 0) {
+    foreach ([$preMonth, $preMonthEnd, $monthStart, $yearStart, $ymd, $current] as $date) {
+      if (!CRM_Utils_Rule::date($date)) {
+        throw new CRM_Core_Exception(ts('Invalid date "%1" (must have form yyyy-mm-dd).', [1 => $date]));
+      }
+    }
+
     $activityFamilies = [
       'premonth_new', 'premonth_renew', 'premonth_total',
       'month_new', 'month_renew', 'month_total',
