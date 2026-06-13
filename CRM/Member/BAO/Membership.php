@@ -1015,6 +1015,9 @@ INNER JOIN  civicrm_membership_type type ON ( type.id = membership.membership_ty
    * @return int
    *   the number of members of type $membershipTypeId whose
    *   start_date is between $startDate and $endDate
+   *
+   * @deprecated The membership dashboard now batches these counts via
+   *   getMembershipSummaryStats(). Retained for backward compatibility.
    */
   public static function getMembershipStarts($membershipTypeId, $startDate, $endDate, $isTest = 0, $isOwner = 0) {
     // Ensure that the dates that are passed to the query are in the format of yyyy-mm-dd
@@ -1083,6 +1086,9 @@ INNER JOIN  civicrm_contact contact ON ( contact.id = membership.contact_id AND 
    *
    * @return int
    *   the number of members of type $membershipTypeId as of $date.
+   *
+   * @deprecated The membership dashboard now batches these counts via
+   *   getMembershipSummaryStats(). Retained for backward compatibility.
    */
   public static function getMembershipCount($membershipTypeId, $date = NULL, $isTest = 0, $isOwner = 0) {
     if (!CRM_Utils_Rule::date($date)) {
@@ -1688,6 +1694,9 @@ WHERE  civicrm_membership.contact_id = civicrm_contact.id
    *   the number of members of type $membershipTypeId
    *   whose join_date is between $startDate and $endDate and
    *   whose start_date is between $startDate and $endDate
+   *
+   * @deprecated The membership dashboard now batches these counts via
+   *   getMembershipSummaryStats(). Retained for backward compatibility.
    */
   public static function getMembershipJoins($membershipTypeId, $startDate, $endDate, $isTest = 0) {
     $testClause = 'membership.is_test = 1';
@@ -1741,6 +1750,9 @@ INNER JOIN  civicrm_contact contact ON ( contact.id = membership.contact_id AND 
    *   returns the number of members of type $membershipTypeId
    *   whose join_date is before $startDate and
    *   whose start_date is between $startDate and $endDate
+   *
+   * @deprecated The membership dashboard now batches these counts via
+   *   getMembershipSummaryStats(). Retained for backward compatibility.
    */
   public static function getMembershipRenewals($membershipTypeId, $startDate, $endDate, $isTest = 0) {
     $testClause = 'membership.is_test = 1';
@@ -1772,6 +1784,189 @@ INNER JOIN  civicrm_contact contact ON ( contact.id = membership.contact_id AND 
     $memberCount = CRM_Core_DAO::singleValueQuery($query, $params);
 
     return (int) $memberCount;
+  }
+
+  /**
+   * Get all membership dashboard summary counts for many membership types in two queries.
+   *
+   * The membership dashboard (CRM_Member_Page_DashBoard) previously gathered its summary table by
+   * calling getMembershipJoins(), getMembershipRenewals(), getMembershipStarts() and
+   * getMembershipCount() once per membership type and per date window — roughly 16 queries for every
+   * membership type, which on sites with many membership types runs into thousands of queries per
+   * page load. This method returns the identical counts keyed by membership type id, computed with a
+   * single grouped query over the signup/renewal activity join and a single grouped query over
+   * current memberships.
+   *
+   * The "new" / "renew" / "total" families correspond to getMembershipJoins (signup activity),
+   * getMembershipRenewals (renewal activity) and getMembershipStarts (either activity); the "owner"
+   * families are getMembershipStarts restricted to owner_membership_id IS NULL; the current/total
+   * families are getMembershipCount. The clause differences between those functions (e.g. how
+   * deleted contacts are excluded) are preserved across the two queries.
+   *
+   * @param array $membershipTypeIds
+   *   Membership type ids to report on. Results are zero-filled for every id so the caller can read
+   *   every family for every type without isset() guards.
+   * @param string $preMonth
+   *   Start of the previous calendar month (Y-m-d).
+   * @param string $preMonthEnd
+   *   End of the previous calendar month (Y-m-d).
+   * @param string $monthStart
+   *   Start of the reported month (Y-m-d).
+   * @param string $yearStart
+   *   Start of the reported year (Y-m-d).
+   * @param string $ymd
+   *   End date for the month, year and total windows (Y-m-d).
+   * @param string $current
+   *   "As of" date for the current-members count (Y-m-d).
+   * @param bool|int $isTest
+   *   If true, count test memberships instead of live ones.
+   *
+   * @return array
+   *   [membershipTypeId => [family => (int) count]] where family is one of:
+   *   premonth_new, premonth_renew, premonth_total, month_new, month_renew, month_total,
+   *   year_new, year_renew, year_total, current_total, total_total,
+   *   premonth_owner, month_owner, year_owner, current_owner, total_owner.
+   */
+  public static function getMembershipSummaryStats($membershipTypeIds, $preMonth, $preMonthEnd, $monthStart, $yearStart, $ymd, $current, $isTest = 0) {
+    $activityFamilies = [
+      'premonth_new', 'premonth_renew', 'premonth_total',
+      'month_new', 'month_renew', 'month_total',
+      'year_new', 'year_renew', 'year_total',
+      'premonth_owner', 'month_owner', 'year_owner',
+    ];
+    $countFamilies = ['current_total', 'total_total', 'current_owner', 'total_owner'];
+
+    // Zero-fill every requested type so callers can read every family unconditionally — a GROUP BY
+    // query omits types that have no matching rows.
+    $stats = [];
+    $typeIds = [];
+    foreach ($membershipTypeIds as $typeId) {
+      $typeId = (int) $typeId;
+      $typeIds[] = $typeId;
+      $stats[$typeId] = array_fill_keys(array_merge($activityFamilies, $countFamilies), 0);
+    }
+    if (empty($typeIds)) {
+      return $stats;
+    }
+    $typeIdList = implode(',', $typeIds);
+    $isTest = $isTest ? 1 : 0;
+
+    if (!self::$_signupActType || !self::$_renewalActType) {
+      self::_getActTypes();
+    }
+    $signupActType = self::$_signupActType;
+    $renewalActType = self::$_renewalActType;
+    $hasSignup = !empty($signupActType);
+    $hasRenewal = !empty($renewalActType);
+
+    // Query 1 — activity-based families (getMembershipJoins / getMembershipRenewals /
+    // getMembershipStarts). A membership counts once if it has a signup/renewal activity in the
+    // window, is a current member, and belongs to a non-deleted contact. COUNT(DISTINCT ...) matches
+    // the originals' dedup when a membership has more than one matching activity.
+    if ($hasSignup || $hasRenewal) {
+      $availableActTypes = [];
+      if ($hasSignup) {
+        $availableActTypes[] = (int) $signupActType;
+      }
+      if ($hasRenewal) {
+        $availableActTypes[] = (int) $renewalActType;
+      }
+      $actTypeList = implode(',', $availableActTypes);
+
+      $preWindow = 'activity.activity_date_time >= %1 AND activity.activity_date_time <= %2';
+      $monthWindow = 'activity.activity_date_time >= %3 AND activity.activity_date_time <= %4';
+      $yearWindow = 'activity.activity_date_time >= %5 AND activity.activity_date_time <= %4';
+      $isSignup = 'activity.activity_type_id = %6';
+      $isRenewal = 'activity.activity_type_id = %7';
+      $isOwner = 'membership.owner_membership_id IS NULL';
+
+      $activityQuery = "
+        SELECT membership.membership_type_id AS membership_type_id,
+          COUNT(DISTINCT CASE WHEN $isSignup AND $preWindow THEN membership.id END) AS premonth_new,
+          COUNT(DISTINCT CASE WHEN $isRenewal AND $preWindow THEN membership.id END) AS premonth_renew,
+          COUNT(DISTINCT CASE WHEN $preWindow THEN membership.id END) AS premonth_total,
+          COUNT(DISTINCT CASE WHEN $isSignup AND $monthWindow THEN membership.id END) AS month_new,
+          COUNT(DISTINCT CASE WHEN $isRenewal AND $monthWindow THEN membership.id END) AS month_renew,
+          COUNT(DISTINCT CASE WHEN $monthWindow THEN membership.id END) AS month_total,
+          COUNT(DISTINCT CASE WHEN $isSignup AND $yearWindow THEN membership.id END) AS year_new,
+          COUNT(DISTINCT CASE WHEN $isRenewal AND $yearWindow THEN membership.id END) AS year_renew,
+          COUNT(DISTINCT CASE WHEN $yearWindow THEN membership.id END) AS year_total,
+          COUNT(DISTINCT CASE WHEN $isOwner AND $preWindow THEN membership.id END) AS premonth_owner,
+          COUNT(DISTINCT CASE WHEN $isOwner AND $monthWindow THEN membership.id END) AS month_owner,
+          COUNT(DISTINCT CASE WHEN $isOwner AND $yearWindow THEN membership.id END) AS year_owner
+        FROM civicrm_membership membership
+        INNER JOIN civicrm_activity activity ON (activity.source_record_id = membership.id AND activity.activity_type_id IN ($actTypeList))
+        INNER JOIN civicrm_membership_status status ON (membership.status_id = status.id AND status.is_current_member = 1)
+        INNER JOIN civicrm_contact contact ON (contact.id = membership.contact_id AND contact.is_deleted = 0)
+        WHERE membership.membership_type_id IN ($typeIdList)
+          AND membership.is_test = $isTest
+        GROUP BY membership.membership_type_id
+      ";
+      $params = [
+        1 => [$preMonth, 'String'],
+        2 => [$preMonthEnd . ' 23:59:59', 'String'],
+        3 => [$monthStart, 'String'],
+        4 => [$ymd . ' 23:59:59', 'String'],
+        5 => [$yearStart, 'String'],
+        6 => [(int) $signupActType, 'Integer'],
+        7 => [(int) $renewalActType, 'Integer'],
+      ];
+      foreach (CRM_Core_DAO::executeQuery($activityQuery, $params)->fetchAll() as $row) {
+        $typeId = (int) $row['membership_type_id'];
+        foreach ($activityFamilies as $family) {
+          $stats[$typeId][$family] = (int) $row[$family];
+        }
+      }
+
+      // Preserve the per-function activity-type guards: getMembershipJoins needs the signup type,
+      // getMembershipRenewals needs the renewal type, and getMembershipStarts (the "total" and owner
+      // families) needs both. When a required type is missing those families return 0 in the
+      // originals, so reproduce that here when only one type is configured.
+      if (!$hasSignup || !$hasRenewal) {
+        foreach ($stats as &$row) {
+          if (!$hasSignup) {
+            $row['premonth_new'] = $row['month_new'] = $row['year_new'] = 0;
+          }
+          if (!$hasRenewal) {
+            $row['premonth_renew'] = $row['month_renew'] = $row['year_renew'] = 0;
+          }
+          $row['premonth_total'] = $row['month_total'] = $row['year_total'] = 0;
+          $row['premonth_owner'] = $row['month_owner'] = $row['year_owner'] = 0;
+        }
+        unset($row);
+      }
+    }
+
+    // Query 2 — current-membership families (getMembershipCount). A membership counts if it is a
+    // current member, belongs to a non-deleted contact, and started on or before the relevant date.
+    // Independent of activity types, so always computed. Note this excludes deleted contacts with a
+    // NOT IN subquery rather than an inner join, matching getMembershipCount exactly.
+    $countQuery = "
+      SELECT civicrm_membership.membership_type_id AS membership_type_id,
+        COUNT(CASE WHEN civicrm_membership.start_date <= %1 THEN civicrm_membership.id END) AS current_total,
+        COUNT(CASE WHEN civicrm_membership.start_date <= %2 THEN civicrm_membership.id END) AS total_total,
+        COUNT(CASE WHEN civicrm_membership.owner_membership_id IS NULL AND civicrm_membership.start_date <= %1 THEN civicrm_membership.id END) AS current_owner,
+        COUNT(CASE WHEN civicrm_membership.owner_membership_id IS NULL AND civicrm_membership.start_date <= %2 THEN civicrm_membership.id END) AS total_owner
+      FROM civicrm_membership
+      LEFT JOIN civicrm_membership_status ON (civicrm_membership.status_id = civicrm_membership_status.id)
+      WHERE civicrm_membership.membership_type_id IN ($typeIdList)
+        AND civicrm_membership.contact_id NOT IN (SELECT id FROM civicrm_contact WHERE is_deleted = 1)
+        AND civicrm_membership.is_test = $isTest
+        AND civicrm_membership_status.is_current_member = 1
+      GROUP BY civicrm_membership.membership_type_id
+    ";
+    $countParams = [
+      1 => [$current, 'String'],
+      2 => [$ymd, 'String'],
+    ];
+    foreach (CRM_Core_DAO::executeQuery($countQuery, $countParams)->fetchAll() as $row) {
+      $typeId = (int) $row['membership_type_id'];
+      foreach ($countFamilies as $family) {
+        $stats[$typeId][$family] = (int) $row[$family];
+      }
+    }
+
+    return $stats;
   }
 
   /**
