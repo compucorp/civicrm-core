@@ -848,7 +848,7 @@ class CRM_Contact_BAO_Group extends CRM_Contact_DAO_Group implements HookInterfa
 
     $orderBy = ' ORDER BY `groups`.title asc';
     if (!empty($params['sort'])) {
-      $orderBy = ' ORDER BY ' . CRM_Utils_Type::escape($params['sort'], 'String');
+      $orderBy = ' ORDER BY ' . CRM_Utils_Type::escape($params['sort'], 'MysqlOrderBy');
 
       // CRM-16905 - Sort by count cannot be done with sql
       if (strpos($params['sort'], 'count') === 0) {
