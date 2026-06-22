@@ -1259,9 +1259,6 @@ ORDER BY   civicrm_email.is_bulkmail DESC
       $mg->save();
     }
 
-    // check and attach and files as needed
-    CRM_Core_BAO_File::processAttachment($params, 'civicrm_mailing', $mailing->id);
-
     $transaction->commit();
 
     // These actions are really 'submit' not create actions.

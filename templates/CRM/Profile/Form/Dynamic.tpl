@@ -70,16 +70,16 @@
         {assign var=fieldset  value=$field.groupTitle}
         {assign var=groupHelpPost  value=$field.groupHelpPost}
         {if $field.groupHelpPre}
-          <div class="messages help">{$field.groupHelpPre}</div>
+          <div class="messages help">{$field.groupHelpPre|purify}</div>
         {/if}
       {/if}
       {if $field.field_type eq "Formatting"}
-        {$field.help_pre}
+        {$field.help_pre|purify}
       {elseif $n}
         {if $field.groupTitle != $fieldset}
           {if $fieldset != $zeroField}
             {if $groupHelpPost}
-              <div class="messages help">{$groupHelpPost}</div>
+              <div class="messages help">{$groupHelpPost|purify}</div>
             {/if}
             {if $mode neq 8 && $mode neq 4}
             </div><!-- end form-layout-compressed-div -->
@@ -91,7 +91,7 @@
         {/if}
         {if $field.help_pre && $action neq 4 && $form.$n.html}
           <div class="crm-section helprow-{$n}-section helprow-pre" id="helprow-{$n}">
-            <div class="content description">{$field.help_pre}</div>
+            <div class="content description">{$field.help_pre|purify}</div>
           </div>
         {/if}
         {if array_key_exists('options_per_line', $field) && $field.options_per_line}
@@ -176,14 +176,14 @@
       {* Show explanatory text for field if not in 'view' mode *}
         {if $field.help_post && $action neq 4 && $form.$n.html}
           <div class="crm-section helprow-{$n}-section helprow-post" id="helprow-{$n}">
-            <div class="content description">{$field.help_post}</div>
+            <div class="content description">{$field.help_post|purify}</div>
           </div>
         {/if}
       {/if}{* end of main if field name if *}
     {/foreach}
 
     {if $field.groupHelpPost}
-      <div class="messages help">{$field.groupHelpPost}</div>
+      <div class="messages help">{$field.groupHelpPost|purify}</div>
     {/if}
 
     {if $mode neq 8 && $mode neq 4}
