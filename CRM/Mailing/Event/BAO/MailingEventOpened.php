@@ -263,7 +263,7 @@ class CRM_Mailing_Event_BAO_MailingEventOpened extends CRM_Mailing_Event_DAO_Mai
     }
     if ($sort) {
       if (is_string($sort)) {
-        $sort = CRM_Utils_Type::escape($sort, 'String');
+        $sort = CRM_Utils_Type::escape($sort, 'MysqlOrderBy');
         $orderBy = $sort;
       }
       else {

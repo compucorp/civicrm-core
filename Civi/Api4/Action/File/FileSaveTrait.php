@@ -31,8 +31,25 @@ trait FileSaveTrait {
       if (isset($file['uri'])) {
         throw new \CRM_Core_Exception("Setting file URI is not permitted. Use file_name instead.");
       }
+      // Security: Validate existing URI before writing content
+      if (!empty($file['content']) && !empty($file['id'])) {
+        $existingUri = \CRM_Core_DAO_File::getDbVal('uri', $file['id']);
+        $this->validateUri($existingUri);
+      }
     }
     return \CRM_Core_BAO_File::writeRecords($items);
+  }
+
+  /**
+   * Validate that a URI/filename doesn't contain directory separators or path traversal.
+   *
+   * @param string $uri
+   * @throws \CRM_Core_Exception
+   */
+  private function validateUri(string $uri): void {
+    if ($uri !== basename($uri)) {
+      throw new \CRM_Core_Exception('Invalid URI: must not contain directory separators or path traversal sequences');
+    }
   }
 
 }

@@ -174,6 +174,8 @@ class CRM_Note_Form_Note extends CRM_Core_Form {
     CRM_Core_BAO_File::formatAttachment($params, $params, 'civicrm_note', $params['id']);
 
     $note = CRM_Core_BAO_Note::add($params);
+    // check and attach and files as needed
+    CRM_Core_BAO_File::processAttachment($params, 'civicrm_note', $note->id);
 
     // Required for postProcess hooks
     $this->setEntityId($note->id);
