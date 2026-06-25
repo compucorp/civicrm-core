@@ -301,11 +301,6 @@ class TimestampTriggers {
     if ($this->getCustomDataEntity()) {
       $customGroups = \CRM_Core_BAO_CustomGroup::getAll(['extends' => $this->getCustomDataEntity(), 'is_multiple' => FALSE]);
       foreach ($customGroups as $customGroup) {
-        // Skip orphaned custom groups whose backing table no longer exists
-        // (e.g. when the last field was deleted but the group record remains).
-        if (!\CRM_Core_DAO::checkTableExists($customGroup['table_name'])) {
-          continue;
-        }
         $relations[] = [
           'table' => $customGroup['table_name'],
           'column' => 'entity_id',
