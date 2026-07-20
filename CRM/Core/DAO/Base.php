@@ -285,7 +285,7 @@ abstract class CRM_Core_DAO_Base extends CRM_Core_DAO {
       // once upstream fixes it.
       \Civi::log()->debug('CIVIPLMMSR-712: unresolvable entity for DAO ' . static::class . ' during rebuild; returning empty definition');
       return [
-        'getInfo' => fn() => [],
+        'getInfo' => fn() => ['title' => '', 'title_plural' => ''],
         'getPaths' => fn() => [],
         'getFields' => fn() => [],
         'getIndices' => fn() => [],
