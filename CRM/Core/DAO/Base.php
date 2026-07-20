@@ -267,6 +267,32 @@ abstract class CRM_Core_DAO_Base extends CRM_Core_DAO {
 
   private static function getEntityDefinition(): array {
     $entityName = CRM_Core_DAO_AllCoreTables::getEntityNameForClass(static::class);
+    if ($entityName === NULL) {
+      // CIVIPLMMSR-712: during a CiviCRM upgrade's final Rebuild, an installed
+      // extension's DAO class can be discovered/enumerated (via ClassScanner) while
+      // its entity is NOT registered in EntityRepository, because the extension's
+      // hook_civicrm_entityTypes is dropped by the upgrade.main dispatch policy.
+      // getEntityNameForClass() then returns NULL and EntityRepository::getEntity()
+      // (typed string) throws an opaque TypeError that aborts the whole upgrade.
+      // Return a benign empty definition so every consumer degrades gracefully
+      // instead of fatalling; the extension re-registers its entities correctly
+      // once it is (re-)enabled after the upgrade completes.
+      //
+      // TEMPORARY downstream patch: the underlying bug is still present on
+      // civicrm-core master - this method was refactored to getEntityProvider(), but
+      // Civi::entity(NULL) throws the identical TypeError there. Revisit on the next
+      // CiviCRM upgrade: port to the new shape if still unfixed upstream, or drop
+      // once upstream fixes it.
+      \Civi::log()->debug('CIVIPLMMSR-712: unresolvable entity for DAO ' . static::class . ' during rebuild; returning empty definition');
+      return [
+        'getInfo' => fn() => [],
+        'getPaths' => fn() => [],
+        'getFields' => fn() => [],
+        'getIndices' => fn() => [],
+        'table' => NULL,
+        'module' => NULL,
+      ];
+    }
     return \Civi\Schema\EntityRepository::getEntity($entityName);
   }
 
