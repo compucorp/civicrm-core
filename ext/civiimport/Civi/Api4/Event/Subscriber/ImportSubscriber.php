@@ -92,10 +92,17 @@ class ImportSubscriber extends AutoService implements EventSubscriberInterface {
       $fkTable = $fkEntity ? CoreUtil::getTableName($fkEntity) : NULL;
       if ($fkEntity && $fkTable) {
         $table = $schema->getTableByName($importEntity['table_name']);
-        $link = new Civi\Api4\Service\Schema\Joinable\Joinable($fkTable, 'id', '_entity_id');
-        $link->setBaseTable($importEntity['table_name']);
-        $link->setJoinType(Joinable::JOIN_TYPE_ONE_TO_MANY);
-        $table->addTableLink('_entity_id', $link);
+        // CIVIPLMMSR-712: an import job whose staging table no longer exists
+        // (orphaned/stale civicrm_user_job row) is absent from the schema map, so
+        // getTableByName() returns NULL. Guard it - otherwise addTableLink() fatals
+        // on NULL and aborts every schema-map build, including the ones CiviCRM runs
+        // mid-upgrade (this aborted the LCC / waterways 5.75->6.4.1 upgrades).
+        if ($table) {
+          $link = new Civi\Api4\Service\Schema\Joinable\Joinable($fkTable, 'id', '_entity_id');
+          $link->setBaseTable($importEntity['table_name']);
+          $link->setJoinType(Joinable::JOIN_TYPE_ONE_TO_MANY);
+          $table->addTableLink('_entity_id', $link);
+        }
       }
     }
   }
