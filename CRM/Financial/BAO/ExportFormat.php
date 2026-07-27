@@ -222,7 +222,9 @@ abstract class CRM_Financial_BAO_ExportFormat {
         'upload_date' => date('YmdHis'),
       ],
     ];
-    civicrm_api3('Activity', 'create', $activityParams);
+    $activity = civicrm_api3('Activity', 'create', $activityParams);
+
+    CRM_Core_BAO_File::processAttachment($activityParams, 'civicrm_activity', $activity['id']);
   }
 
   /**
