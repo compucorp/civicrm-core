@@ -201,10 +201,11 @@ trait DAOActionTrait {
       if (!$field || empty($field['fk_entity'])) {
         continue;
       }
-      $fkDao = CoreUtil::getBAOFromApiName($field['fk_entity']);
+      $fkEntityName = $field['fk_entity'];
+      $fkDao = CoreUtil::getBAOFromApiName($fkEntityName);
       // Constrain search to the domain of the current entity
       $domainConstraint = NULL;
-      if (isset($fkDao::getSupportedFields()['domain_id'])) {
+      if ($fkDao && isset($fkDao::getSupportedFields()['domain_id'])) {
         if (!empty($record['domain_id'])) {
           $domainConstraint = $record['domain_id'] === 'current_domain' ? \CRM_Core_Config::domainID() : $record['domain_id'];
         }
@@ -212,16 +213,29 @@ trait DAOActionTrait {
           $domainConstraint = \CRM_Core_DAO::getFieldValue($this->getBaoName(), $record['id'], 'domain_id');
         }
       }
+      $conditions = [[$fkField, '=', $value]];
       if ($domainConstraint) {
-        $fkSearch = new $fkDao();
-        $fkSearch->domain_id = $domainConstraint;
-        $fkSearch->$fkField = $value;
-        $fkSearch->find(TRUE);
-        $record[$fieldName] = $fkSearch->id;
+        $conditions[] = ['domain_id', '=', $domainConstraint];
       }
-      // Simple lookup without all the fuss about domains
+      $resolvedId = NULL;
+      // Same test as CoreUtil::entityExists() on newer CiviCRM (not present on 5.51.3)
+      if (CoreUtil::getInfoItem($fkEntityName, 'name')) {
+        $fkResult = civicrm_api4($fkEntityName, 'get', [
+          'select' => ['id'],
+          'where' => $conditions,
+          'checkPermissions' => $this->getCheckPermissions(),
+        ]);
+        $resolvedId = $fkResult->single()['id'];
+      }
+      // E.g. component_id (Component does not have an Api4 entity)
+      elseif ($fkDao) {
+        $resolvedId = \CRM_Core_DAO::getFieldValue($fkDao, $value, 'id', $fkField);
+      }
+      if ($resolvedId !== NULL) {
+        $record[$fieldName] = $resolvedId;
+      }
       else {
-        $record[$fieldName] = \CRM_Core_DAO::getFieldValue($fkDao, $value, 'id', $fkField);
+        throw new \CRM_Core_Exception('Failed to load ' . $fkEntityName);
       }
       unset($record[$key]);
     }
