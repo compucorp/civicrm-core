@@ -37,6 +37,7 @@ class CRM_Upgrade_Incremental_php_SixFour extends CRM_Upgrade_Incremental_Base {
       'input_type' => 'Text',
       'description' => ts('The reason the email bounced.'),
     ]);
+    $this->addTask(ts('Create index %1', [1 => 'civicrm_mailing_recipients.index_mailing_id_contact_id']), 'addIndex', 'civicrm_mailing_recipients', [['mailing_id', 'contact_id']], 'index');
   }
 
   public static function removeForeignKeyReferencesCacheTables(): bool {
