@@ -86,4 +86,10 @@
     <key>id</key>
     <onDelete>SET NULL</onDelete>
   </foreignKey>
+  <index>
+    <name>index_mailing_id_contact_id</name>
+    <fieldName>mailing_id</fieldName>
+    <fieldName>contact_id</fieldName>
+    <add>5.75.0.1</add>
+  </index>
 </table>
