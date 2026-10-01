@@ -214,6 +214,7 @@ class Themes {
         'excludes' => array(
           "css/civicrm.css",
           "css/bootstrap.css",
+          "css/crm-i.css",
         ),
       ),
       self::FALLBACK_THEME => array(
