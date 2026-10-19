@@ -82,7 +82,6 @@ class CRM_Upgrade_Incremental_php_FiveSeventyFive extends CRM_Upgrade_Incrementa
    *   The version number matching this function name
    */
   public function upgrade_5_75_0_1($rev): void {
-    $this->addTask(ts('Upgrade DB to %1: SQL', [1 => $rev]), 'runSql', $rev);
     $this->addTask(ts('Create index %1', [1 => 'civicrm_mailing_recipients.index_mailing_id_contact_id']), 'addIndex', 'civicrm_mailing_recipients', [['mailing_id', 'contact_id']], 'index');
   }
 
