@@ -37,6 +37,17 @@ class CRM_Upgrade_Incremental_php_SixFour extends CRM_Upgrade_Incremental_Base {
       'input_type' => 'Text',
       'description' => ts('The reason the email bounced.'),
     ]);
+  }
+
+  /**
+   * Upgrade step; creates the mailing recipients composite index.
+   *
+   * Declared as its own revision so that sites already on 6.4.1 run it.
+   *
+   * @param string $rev
+   *   The version number matching this function name
+   */
+  public function upgrade_6_4_1_1($rev): void {
     $this->addTask(ts('Create index %1', [1 => 'civicrm_mailing_recipients.index_mailing_id_contact_id']), 'addIndex', 'civicrm_mailing_recipients', [['mailing_id', 'contact_id']], 'index');
   }
 
