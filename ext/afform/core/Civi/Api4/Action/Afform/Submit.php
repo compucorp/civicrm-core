@@ -384,6 +384,12 @@ class Submit extends AbstractProcessor {
     $mainEntity = $event->getFormDataModel()->getEntity($event->getEntityName());
     foreach ($joins as $joinEntityName => $join) {
       $values = self::filterEmptyJoins($mainEntity, $joinEntityName, $join);
+      // Expand a multi-value join field (e.g. a multi-select bound to a
+      // single-value column such as EntityTag.tag_id) into one record per
+      // value, so every selected value is saved as its own row instead of an
+      // array being written into a single record. $expanded flags whether that
+      // happened, which is the only case where match-on-natural-key is needed.
+      [$values, $expanded] = self::expandMultivalueJoinRecords($joinEntityName, $values);
       // TODO: REPLACE works for creating or updating contacts, but different logic would be needed if
       // the contact was being auto-updated via a dedupe rule; in that case we would not want to
       // delete any existing records.
@@ -392,6 +398,14 @@ class Submit extends AbstractProcessor {
           // Disable permission checks because the main entity has already been vetted
           'checkPermissions' => FALSE,
           'where' => self::getJoinWhereClause($event->getFormDataModel(), $event->getEntityName(), $joinEntityName, $entityId),
+          // Only when records were expanded, let replace id-match an existing
+          // row on its natural key instead of re-inserting it, so a re-submitted
+          // multi-value record (e.g. EntityTag) updates the existing row rather
+          // than hitting the unique index. Scoped to the expanded path so every
+          // other join save stays byte-identical, and an entity whose unique
+          // index does not include the FK back to the main entity (e.g. OpenID)
+          // can never have an unrelated row re-pointed at this form's parent.
+          'match' => $expanded ? (CoreUtil::getInfoItem($joinEntityName, 'match_fields') ?? []) : [],
           'records' => $values,
         ]);
         $indexedResult = array_combine(array_keys($values), (array) $result);
@@ -412,6 +426,93 @@ class Submit extends AbstractProcessor {
         $event->setJoinIds($index, $joinEntityName, []);
       }
     }
+  }
+
+  /**
+   * Expand any join record that holds multiple values for a single-value field
+   * into one record per value.
+   *
+   * A multi-select widget bound to a join field that stores one value per row
+   * (e.g. EntityTag.tag_id) submits a single record with an array value; the
+   * join entity cannot store that, so without expansion nothing is saved. This
+   * turns `[['tag_id' => [1, 2]]]` into `[['tag_id' => 1], ['tag_id' => 2]]`.
+   * Fields that genuinely store a list (serialize set) are left untouched.
+   *
+   * @param string $joinEntityName
+   * @param array $records
+   * @return array
+   *   Tuple of [records, expanded], where `expanded` is TRUE only when at least
+   *   one record was split into several. When it is FALSE the records are
+   *   returned unchanged, with their original keys intact.
+   */
+  private static function expandMultivalueJoinRecords(string $joinEntityName, array $records): array {
+    static $scalarFields = [];
+    if (!array_key_exists($joinEntityName, $scalarFields)) {
+      try {
+        $fields = [];
+        foreach (civicrm_api4($joinEntityName, 'getFields', ['checkPermissions' => FALSE, 'action' => 'create']) as $field) {
+          if (empty($field['serialize'])) {
+            $fields[$field['name']] = TRUE;
+          }
+        }
+        // Only populate the cache on success, so a transient getFields() failure
+        // does not permanently disable expansion for the rest of the request.
+        $scalarFields[$joinEntityName] = $fields;
+      }
+      catch (\Exception $e) {
+        \Civi::log('afform')->warning('Afform: could not load fields for {entity}; multi-value join expansion skipped. {message}', [
+          'entity' => $joinEntityName,
+          'message' => $e->getMessage(),
+        ]);
+        return [$records, FALSE];
+      }
+    }
+    $expanded = [];
+    $didExpand = FALSE;
+    $idField = CoreUtil::getIdFieldName($joinEntityName);
+    foreach ($records as $key => $record) {
+      $multiField = NULL;
+      foreach ($record as $fieldName => $value) {
+        if (is_array($value) && !empty($scalarFields[$joinEntityName][$fieldName])) {
+          $multiField = $fieldName;
+          break;
+        }
+      }
+      if ($multiField === NULL) {
+        // Append rather than write by original key: once a record has expanded,
+        // $expanded holds appended integer keys, so a keyed write here could
+        // land on a slot an expanded row already took and overwrite it. The
+        // original keys only need to survive when nothing expanded, which the
+        // early return below handles by returning $records untouched.
+        $expanded[] = $record;
+        continue;
+      }
+      $didExpand = TRUE;
+      foreach ($record[$multiField] as $singleValue) {
+        $newRecord = [$multiField => $singleValue] + $record;
+        // Expanded rows are distinct records, so they must not keep the
+        // original row's id (which would make replace() overwrite a row).
+        unset($newRecord[$idField]);
+        $expanded[] = $newRecord;
+      }
+    }
+    // Preserve the original keys when nothing was expanded: filterEmptyJoins()
+    // keeps the submitted indexes deliberately, and both the existing-row
+    // matching in saveJoins() and file uploads in SubmitFile rely on them.
+    if (!$didExpand) {
+      return [$records, FALSE];
+    }
+    // Deduplicate identical rows across the whole expanded set, not within each
+    // record: the same value repeated in one multi-select, or chosen again in a
+    // second repeat row, would otherwise issue two inserts of the same natural
+    // key and hit the join's unique index.
+    $unique = [];
+    foreach ($expanded as $record) {
+      $signature = $record;
+      ksort($signature);
+      $unique[serialize($signature)] = $record;
+    }
+    return [array_values($unique), TRUE];
   }
 
   /**
