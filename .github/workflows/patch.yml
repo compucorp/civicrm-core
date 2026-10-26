@@ -52,11 +52,36 @@ jobs:
           tools: composer:2.8.12
 
       - name: Install locked library versions
-        env:
-          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GITHUB_TOKEN }}"}}'
+        # No COMPOSER_AUTH here on purpose. Composer 2.8.12 only accepts [.A-Za-z0-9_] in a
+        # GitHub token, and GitHub's new GITHUB_TOKEN format (ghs_<id>_<base64url JWT>) can
+        # contain a '-', so passing it makes the install fail (GHSA-f9f8-rm49-7jv2, fixed in
+        # Composer 2.9.8, which compile-plugin blocks). Installs work unauthenticated: this
+        # run only fetches the packages that differ from upstream's tarball, well under the
+        # 60/hour anonymous limit. Do not add it back while Composer is pinned below 2.9.8.
         run: |
           cd ../to-be-patched/civicrm
           composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+          # --no-scripts above is required: tools/scripts/composer/ is not shipped in the
+          # distributed tarball. But those scripts post-process vendor/ after install - most
+          # importantly dompdf-cleanup.sh, which writes dompdf's installed-fonts map (to
+          # DejaVu on 6.4.1+, to the core PDF fonts on 5.75.0, which deletes DejaVu to save
+          # 12mb). Any package Composer replaces would otherwise silently lose that
+          # post-processing; for dompdf on 6.4.1 that means non-Latin text stops rendering
+          # in PDFs. So run them here from the fork checkout, deriving the list from
+          # composer.json so it cannot drift.
+          php -r '
+            $j = json_decode(file_get_contents("composer.json"), true);
+            foreach (($j["scripts"]["post-install-cmd"] ?? []) as $cmd) {
+              echo preg_replace("#^bash tools/#", "bash " . getenv("GITHUB_WORKSPACE") . "/tools/", $cmd), PHP_EOL;
+            }
+          ' > ../post-install-cmd.sh
+          # Fail loudly if that produced nothing - a renamed key or a composer.json that
+          # fails to parse would be swallowed by the `?? []`, the scripts would not run, and
+          # the font regression would come back silently. The guard and audit below only
+          # compare versions, so neither would catch it.
+          test -s ../post-install-cmd.sh || { echo "::error::no post-install-cmd entries found in composer.json"; exit 1; }
+          cat ../post-install-cmd.sh
+          bash -e ../post-install-cmd.sh
           cd ..
           tar czf "${{ steps.patch.outputs.package_path }}" civicrm
 
