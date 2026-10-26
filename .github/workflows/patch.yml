@@ -44,6 +44,41 @@ jobs:
           project_name: 'civicrm'
           project_type: 'civicrm-core'
 
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, json, mbstring, mysqli, simplexml, xml, xmlreader, xmlwriter, zip, zlib
+          tools: composer:2.8.12
+
+      - name: Install locked library versions
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GITHUB_TOKEN }}"}}'
+        run: |
+          cd ../to-be-patched/civicrm
+          composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+          cd ..
+          tar czf "${{ steps.patch.outputs.package_path }}" civicrm
+
+      - name: Verify vendor matches the lock
+        run: |
+          cd ../to-be-patched/civicrm
+          composer validate --no-check-all --no-check-publish
+          php -r '
+            $lock = json_decode(file_get_contents("composer.lock"), true)["packages"];
+            $inst = json_decode(file_get_contents("vendor/composer/installed.json"), true)["packages"];
+            $l = []; foreach ($lock as $p) { $l[$p["name"]] = $p["version"]; }
+            $v = []; foreach ($inst as $p) { $v[$p["name"]] = $p["version"]; }
+            $bad = [];
+            foreach ($l as $n => $ver) {
+              if (!isset($v[$n])) { $bad[] = "$n: locked $ver, not installed"; }
+              elseif ($v[$n] !== $ver) { $bad[] = "$n: locked $ver, vendor has {$v[$n]}"; }
+            }
+            foreach ($v as $n => $ver) { if (!isset($l[$n])) { $bad[] = "$n: vendor has $ver, not in lock"; } }
+            if ($bad) { fwrite(STDERR, "vendor/ does not match composer.lock:" . PHP_EOL . "  " . implode(PHP_EOL . "  ", $bad) . PHP_EOL); exit(1); }
+            printf("vendor/ matches composer.lock (%d packages)" . PHP_EOL, count($l));
+          '
+
       - name: Create a new release
         id: create_release
         uses: compucorp/create-release@target_commitish
