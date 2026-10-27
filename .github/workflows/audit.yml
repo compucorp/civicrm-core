@@ -1,0 +1,94 @@
+name: Audit released package
+
+# Audits the PUBLISHED tarball against BOTH advisory sources. COMCL-1549.
+#
+# The failure this exists to catch is an advisory published against a library version we
+# already ship. The core is frozen, so nothing re-checks it after release.
+#
+# Four deliberate choices:
+#
+#  * It polls GitHub REPOSITORY-LEVEL advisories as well as running `composer audit`.
+#    `composer audit` reads Packagist, which mirrors GitHub's *global* database. A maintainer
+#    can publish on their own repo's Security tab, and until GitHub reviews it into the global
+#    database `composer audit` cannot see it. That gap has already cost us five advisories:
+#    the three PhpSpreadsheet CVEs on COMCL-1548 and both masterminds/html5 GHSAs on
+#    COMCL-1549. A check built only on `composer audit` would have missed every one.
+#
+#  * `composer audit` runs WITHOUT `--locked`. The default audits vendor/ (what we ship);
+#    `--locked` audits composer.lock (what we claim). Those two disagreed for two years on
+#    this branch - that is COMCL-1548 - so auditing the lock would rebuild the original bug
+#    into the check meant to prevent it.
+#
+#  * It diffs against .github/composer-audit-baseline.json rather than failing on anything.
+#    Both cores carry accepted, assessed-unreachable advisories; a plain gate would be red
+#    every run and get switched off.
+#
+#  * A version range it cannot parse is reported as UNKNOWN and fails the run. Silence must
+#    not be mistakable for safety - that is the whole point of the check.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+env:
+  base_version: 5.75.0
+
+jobs:
+  audit:
+    name: Audit released package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the patches branch
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, json, mbstring, mysqli, simplexml, xml, xmlreader, xmlwriter, zip, zlib
+          tools: composer:2.8.12
+
+      - name: Find and download the newest released package for this line
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          code=$(curl -sSL -w '%{http_code}' -H "Authorization: Bearer $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/$GITHUB_REPOSITORY/releases?per_page=100" -o releases.json)
+          if [ "$code" != "200" ]; then
+            echo "::error::Could not list releases (HTTP $code). This is an API failure, not a missing release."
+            exit 1
+          fi
+          url=$(php .github/scripts/pick-release.php releases.json "${base_version}")
+          if [ -z "$url" ]; then
+            echo "::error::No released package found for ${base_version}"
+            exit 1
+          fi
+          mkdir -p package
+          curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -o package/core.tar.gz "$url"
+          tar xzf package/core.tar.gz -C package
+          test -f package/civicrm/vendor/composer/installed.json
+
+      - name: composer audit (Packagist / global advisory database)
+        run: |
+          cd package/civicrm
+          # audit exits non-zero whenever it finds anything, which is the normal case here
+          composer audit --format=json > "$GITHUB_WORKSPACE/composer-audit.json" || true
+          test -s "$GITHUB_WORKSPACE/composer-audit.json"
+
+      - name: Poll repository-level advisories
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          php .github/scripts/repo-advisories.php \
+            package/civicrm/vendor/composer/installed.json \
+            "$GITHUB_WORKSPACE/repo-advisories.json"
+
+      - name: Compare both sources against the baseline
+        run: |
+          php .github/scripts/compare-advisories.php \
+            "$GITHUB_WORKSPACE/composer-audit.json" \
+            "$GITHUB_WORKSPACE/repo-advisories.json" \
+            .github/composer-audit-baseline.json
