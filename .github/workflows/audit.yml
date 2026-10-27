@@ -1,0 +1,95 @@
+name: Audit released packages
+
+# Audits the PUBLISHED tarballs against BOTH advisory sources. COMCL-1549.
+#
+# The failure this exists to catch is an advisory published *after* a release, against a
+# library version we already ship. The core is frozen, so nothing re-checks it.
+#
+# WHY THIS LIVES ON master, NOT ON THE PATCHES BRANCHES.
+# GitHub only runs `schedule` from the repository's default branch, and `workflow_dispatch`
+# only offers workflows that exist there. The first version of this sat on 5.75.0-patches
+# and 6.4.1-patches, where neither trigger can ever fire - it would have been inert.
+# Nothing here reads a patches branch anyway: it downloads published tarballs, so one job
+# with a matrix covers every line. Caught in review by @marcelocompucorp.
+#
+# Three further deliberate choices:
+#
+#  * It polls GitHub REPOSITORY-LEVEL advisories as well as running `composer audit`.
+#    `composer audit` reads Packagist, which mirrors GitHub's *global* database. Until
+#    GitHub reviews a maintainer's own advisory into that database, `composer audit` cannot
+#    see it. That gap cost us five advisories in two days - the three PhpSpreadsheet CVEs
+#    on COMCL-1548 and both masterminds/html5 GHSAs on COMCL-1549.
+#
+#  * `composer audit` runs WITHOUT `--locked`. The default audits vendor/, which is what we
+#    ship; `--locked` audits composer.lock, which is what we claim. Those disagreed for two
+#    years on 5.75.0 - that is COMCL-1548 - so auditing the lock would rebuild the original
+#    bug into the check meant to catch it.
+#
+#  * Nothing may report "clean" when it means "could not ask". An unparseable range, an
+#    unreachable repository, or an API error all fail the run and say which.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Audit ${{ matrix.base_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        base_version: ['5.75.0', '6.4.1']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, json, mbstring, mysqli, simplexml, xml, xmlreader, xmlwriter, zip, zlib
+          tools: composer:2.8.12
+
+      - name: Find and download the newest released package for this line
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          base_version: ${{ matrix.base_version }}
+        run: |
+          code=$(curl -sSL -w '%{http_code}' -H "Authorization: Bearer $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/$GITHUB_REPOSITORY/releases?per_page=100" -o releases.json)
+          if [ "$code" != "200" ]; then
+            echo "::error::Could not list releases (HTTP $code). This is an API failure, not a missing release."
+            exit 1
+          fi
+          url=$(php .github/scripts/pick-release.php releases.json "${base_version}")
+          if [ -z "$url" ]; then exit 1; fi
+          mkdir -p package
+          curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -o package/core.tar.gz "$url"
+          tar xzf package/core.tar.gz -C package
+          test -f package/civicrm/vendor/composer/installed.json
+
+      - name: composer audit (Packagist / global advisory database)
+        run: |
+          cd package/civicrm
+          # audit exits non-zero whenever it finds anything, which is the normal case here
+          composer audit --format=json > "$GITHUB_WORKSPACE/composer-audit.json" || true
+          test -s "$GITHUB_WORKSPACE/composer-audit.json"
+
+      - name: Poll repository-level advisories
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          php .github/scripts/repo-advisories.php \
+            package/civicrm/vendor/composer/installed.json \
+            "$GITHUB_WORKSPACE/repo-advisories.json"
+
+      - name: Compare both sources against the baseline
+        run: |
+          php .github/scripts/compare-advisories.php \
+            "$GITHUB_WORKSPACE/composer-audit.json" \
+            "$GITHUB_WORKSPACE/repo-advisories.json" \
+            .github/composer-audit-baseline.json
