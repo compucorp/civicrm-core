@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Advisories accepted on the patched core, checked by .github/workflows/audit.yml.",
+    "",
+    "The audit FAILS on any advisory not listed here, so one published against a version we",
+    "already ship is surfaced instead of going unnoticed (COMCL-1549). It WARNS about ids",
+    "listed here that no longer appear, so this file gets pruned as libraries are bumped.",
+    "Reachability assessments are recorded on COMCL-1549.",
+    "",
+    "This file lives under .github/ deliberately: the Packaging action builds its patch with",
+    "'git diff .. :!.github', so anything outside .github would be shipped inside the tarball.",
+    "",
+    "Reviewed 2026-10-27 against 5.75.0+patch.c2e7fd and 6.4.1+patch.37cbe8, after the",
+    "COMCL-1549 bumps. Identical on 5.75.0-patches and 6.4.1-patches."
+  ],
+  "accepted": {
+    "CVE-2026-46643": "knplabs/knp-snappy v1.4.4, High. Unescaped binary path. Not reachable: wkhtmltopdfPath is an administer-CiviCRM domain setting. The fix (v1.7.1) declares php >= 8.1, above both lines' config.platform.php (7.4.0 / 8.0.0), and additionally requires psr/log ^2.0||^3.0 while both lines sit on 1.1.4. See GHSA-87qc-37cw-84h4 below.",
+    "CVE-2026-46683": "knplabs/knp-snappy v1.4.4, Medium. Same package, same blockers as CVE-2026-46643.",
+    "CVE-2025-45769": "firebase/php-jwt, Low. Deliberately not taken. Upstream widened the constraint in b64a71eec3 and the pick applies on 6.4.1, but v7.0.0 adds HMAC key-length validation throwing DomainException for keys shorter than the digest; CryptoRegistry::addSymmetricKey() enforces no minimum and its b64 KDF is a passthrough, and DomainException extends LogicException, which neither branch's CryptoJwt::decode() catches. Master is protected only by ca3423463e, from a refactor chain we do not carry."
+  },
+  "accepted_repo_level": {
+    "GHSA-87qc-37cw-84h4": "knplabs/knp-snappy, Low. Repository-level advisory, invisible to composer audit. Affects <= 1.7.1, i.e. the fixed release too, so bumping would not clear it even if the platform allowed."
+  },
+  "accepted_unpollable": {
+    "marcj/topsort": "HTTP 404 - the GitHub repository for topsort/topsort has been removed or renamed. Packagist still covers the package via composer audit, so it is checked by one source rather than two. Re-check if the package is ever bumped."
+  }
+}
