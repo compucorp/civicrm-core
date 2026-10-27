@@ -30,6 +30,51 @@ jobs:
           wget https://raw.githubusercontent.com/compucorp/civicrm-drupal/66a349a52054c1c1ba515fa135c68c56ed7a5dd7/modules/civicrmtheme/civicrmtheme.module
           mv civicrmtheme.module to-be-patched/civicrm/drupal/modules/civicrmtheme/civicrmtheme.module
 
+      - name: Remove CKEditor demo pages
+        # CKEditor 4 ships demo pages that every site then serves publicly. CVE-2023-4771
+        # and CVE-2024-24816 both live in samples/old/, and two files there are PHP that
+        # echoes POST data back. Bumping does not help: CiviCRM 5.75.0 bundles ckeditor
+        # 4.18.0, upstream master is on 4.22.1, and both ship the identical samples tree.
+        # Both CVEs need 4.24.0-LTS, which is CKSource's paid Extended Support line.
+        #
+        # This has to happen here rather than in the fork: bower_components/ is not tracked
+        # on the patches branch, so the patch diff has nothing to delete. Deleting in a
+        # client repo does not hold either - the next CiviCRM upgrade restores the tree.
+        #
+        # samples/ cannot go wholesale. CKEditorConfig.php::addResources() loads five files
+        # out of it at runtime (three toolbarconfigurator scripts, fontello.css and
+        # samples.css), fontello.css pulls samples/toolbarconfigurator/font/, and
+        # plugins/preview/preview.html is a runtime file despite sitting near the samples.
+        # Keep exactly those - the guard below fails the build if any of them goes missing.
+        run: |
+          cd ../to-be-patched/civicrm/bower_components/ckeditor
+          rm -rf samples/index.html \
+                 samples/js \
+                 samples/img \
+                 samples/old \
+                 samples/toolbarconfigurator/index.html \
+                 samples/toolbarconfigurator/js/toolbartextmodifier.js \
+                 samples/toolbarconfigurator/lib
+          for f in samples/toolbarconfigurator/js/fulltoolbareditor.js \
+                   samples/toolbarconfigurator/js/abstracttoolbarmodifier.js \
+                   samples/toolbarconfigurator/js/toolbarmodifier.js \
+                   samples/toolbarconfigurator/css/fontello.css \
+                   samples/css/samples.css \
+                   plugins/preview/preview.html; do
+            test -f "$f" || { echo "::error::CKEditor runtime file removed by mistake: $f"; exit 1; }
+          done
+          test -n "$(ls -A samples/toolbarconfigurator/font 2>/dev/null)" \
+            || { echo "::error::CKEditor fontello fonts removed by mistake"; exit 1; }
+          # Every demo page is HTML or PHP and none of the kept files is either, so the
+          # sweep covers both wholesale - a page a later CKEditor adds under a new name
+          # fails the build here instead of shipping.
+          leftover=$(find samples \( -name '*.php' -o -name '*.htm*' \) -print)
+          if [ -n "$leftover" ]; then
+            echo "::error::CKEditor demo pages still present after cleanup"
+            echo "$leftover"
+            exit 1
+          fi
+
       - name: Checkout the fork
         uses: actions/checkout@v2
         with:
