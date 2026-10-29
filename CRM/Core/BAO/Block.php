@@ -220,7 +220,7 @@ class CRM_Core_BAO_Block {
           unset($blockIds[$blockId]);
         }
         else {
-          unset($value['id']);
+          unset($params[$blockName][$count]['id']);
         }
       }
     }
