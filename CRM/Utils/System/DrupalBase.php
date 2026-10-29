@@ -9,6 +9,8 @@
  +--------------------------------------------------------------------+
  */
 
+use Symfony\Component\Finder\Exception\AccessDeniedException;
+
 /**
  *
  * @package CRM
@@ -242,6 +244,7 @@ abstract class CRM_Utils_System_DrupalBase extends CRM_Utils_System_Base {
    */
   public function permissionDenied() {
     drupal_access_denied();
+    throw new AccessDeniedException();
   }
 
   /**
@@ -847,6 +850,13 @@ abstract class CRM_Utils_System_DrupalBase extends CRM_Utils_System_Base {
    */
   public function supportsUfLogging(): bool {
     return TRUE;
+  }
+
+  public function handleUnhandledException(\Throwable $e) {
+    if ($e instanceof AccessDeniedException) {
+      throw $e;
+    }
+    CRM_Core_Error::handleUnhandledException($e);
   }
 
 }
