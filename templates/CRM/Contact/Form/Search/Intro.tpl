@@ -23,7 +23,7 @@
       <a href="{$addMembersURL}" class="button no-popup"><span><i class="crm-i fa-user-plus" aria-hidden="true"></i> {ts 1=$group.title}Add Contacts to %1{/ts}</span></a>
       {if $ssID}{help id="id-add-to-smartGroup"}{/if}
   {/if}
-  {if $permissionEditSmartGroup}
+  {if $permissionEditGroupSettings}
     {capture assign=groupSettingsURL}{crmURL p='civicrm/group/edit' q="action=update&id=`$group.id`&reset=1"}{/capture}
         <a href="{$groupSettingsURL}" class="action-item button"><span><i class="crm-i fa-wrench" aria-hidden="true"></i> {ts}Edit Group Settings{/ts}</span></a>
   {/if}
