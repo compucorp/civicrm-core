@@ -501,6 +501,34 @@ class Container {
       'handleException',
     ], -200);
 
+    // Security checks for contact belongings (Address, Email, Phone, etc.) are NOT
+    // registered on this branch: upstream's 6da78e6d5, which adds checkContactAccessPre()
+    // and checkContactAccessAuthorizeRecord() to CRM_Contact_AccessTrait, is not in this
+    // backport, so there is no method for these listeners to call.
+
+    // Security checks for record ownership (Batch, Note, ReportInstance).
+    // SavedSearch and UserJob are not registered: their upstream patches are not in this
+    // backport, so those BAOs do not carry CRM_Core_OwnershipAccessTrait. SearchParamSet
+    // does not exist in this core.
+    foreach ([
+      'Batch' => 'CRM_Batch_BAO_Batch',
+      'Note' => 'CRM_Core_BAO_Note',
+      'ReportInstance' => 'CRM_Report_BAO_ReportInstance',
+    ] as $entity => $bao) {
+      $dispatcher->addListener("hook_civicrm_pre::{$entity}", [$bao, 'checkOwnershipAccessPre']);
+      $dispatcher->addListener("civi.api4.authorizeRecord::{$entity}", [$bao, 'checkOwnershipAccessAuthorizeRecord']);
+    }
+
+    // Security checks for dynamic foreign keys (EntityTag, Note, Translation)
+    foreach ([
+      'EntityTag' => 'CRM_Core_BAO_EntityTag',
+      'Note' => 'CRM_Core_BAO_Note',
+      'Translation' => 'CRM_Core_BAO_Translation',
+    ] as $entity => $bao) {
+      $dispatcher->addListener("hook_civicrm_pre::{$entity}", [$bao, 'checkDynamicFKAccessPre']);
+      $dispatcher->addListener("civi.api4.authorizeRecord::{$entity}", [$bao, 'checkDynamicFKAccessAuthorizeRecord']);
+    }
+
     return $dispatcher;
   }
 
