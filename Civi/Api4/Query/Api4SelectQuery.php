@@ -368,6 +368,9 @@ class Api4SelectQuery extends Api4Query {
     if (!$stack) {
       // Track field clauses added to the main entity
       $this->aclFields = array_keys($clauses);
+      if (isset($clauses['id']) && isset($this->apiFieldSpec['contact_id'])) {
+        $this->aclFields[] = 'contact_id';
+      }
     }
     return array_filter($clauses);
   }
