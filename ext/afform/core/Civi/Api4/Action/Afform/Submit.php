@@ -388,10 +388,27 @@ class Submit extends AbstractProcessor {
       // the contact was being auto-updated via a dedupe rule; in that case we would not want to
       // delete any existing records.
       if ($values) {
+        $joinWhere = self::getJoinWhereClause($event->getFormDataModel(), $event->getEntityName(), $joinEntityName, $entityId);
+        // The join id field is accepted from the browser, and the replace below runs with
+        // permission checks off because the main entity has already been vetted. So a submitted
+        // id must be checked against the records this entity actually owns, or a form could be
+        // used to overwrite another contact's email, phone or address. Any id that is not one of
+        // ours is dropped, which turns the write into a create rather than failing the submission.
+        $joinIdField = CoreUtil::getIdFieldName($joinEntityName);
+        $ownedIds = civicrm_api4($joinEntityName, 'get', [
+          'checkPermissions' => FALSE,
+          'where' => $joinWhere,
+          'select' => [$joinIdField],
+        ])->column($joinIdField);
+        foreach ($values as $valueKey => $value) {
+          if (!empty($value[$joinIdField]) && !in_array($value[$joinIdField], $ownedIds)) {
+            unset($values[$valueKey][$joinIdField]);
+          }
+        }
         $result = civicrm_api4($joinEntityName, 'replace', [
           // Disable permission checks because the main entity has already been vetted
           'checkPermissions' => FALSE,
-          'where' => self::getJoinWhereClause($event->getFormDataModel(), $event->getEntityName(), $joinEntityName, $entityId),
+          'where' => $joinWhere,
           'records' => $values,
         ]);
         $indexedResult = array_combine(array_keys($values), (array) $result);
