@@ -403,6 +403,14 @@ function afform_civicrm_preProcess($formName, &$form) {
  * Implements hook_civicrm_pre().
  */
 function afform_civicrm_pre($op, $entity, $id, &$params) {
+  // During `cv upgrade:db` the upgrade dispatch policy skips hook_civicrm_container,
+  // so afform_scanner is not registered, and Afform::revert() below fails with
+  // "non-existent service". The managed-entity cleanup deletes stale search displays
+  // in exactly that boot, which stopped releases (CIVIPLMMSR-802). Skip the revert
+  // then, as afform_civicrm_managed() already does without the scanner.
+  if ($op === 'delete' && !\Civi::container()->has('afform_scanner')) {
+    return;
+  }
   // When deleting a searchDisplay, also delete any Afforms the display is embedded within
   if ($entity === 'SearchDisplay' && $op === 'delete') {
     $display = \Civi\Api4\SearchDisplay::get(FALSE)
