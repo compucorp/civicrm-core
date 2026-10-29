@@ -30,6 +30,12 @@ class SqlEntityMetadata extends EntityMetadataBase {
         }
         return [];
 
+      case 'indices':
+        if (isset($this->getEntity()['getIndices'])) {
+          return $this->getEntity()['getIndices']();
+        }
+        return [];
+
       default:
         return $this->getEntity()[$propertyName] ?? $this->getEntity()['getInfo']()[$propertyName] ?? NULL;
 
