@@ -542,7 +542,7 @@ class Api4SelectQuery extends Api4Query {
     // Used to dedupe acl clauses
     $aclStack = [];
     // See if the ON clause already contains an FK reference to joinEntity
-    $explicitFK = array_filter($joinTree, function($clause) use ($alias, $joinEntityFields, &$aclStack) {
+    $explicitFK = array_filter($joinTree, function($clause) use ($alias, $joinEntity, $joinEntityFields, &$aclStack) {
       [$sideA, $op, $sideB] = array_pad((array) $clause, 3, NULL);
       if ($op !== '=' || !$sideB) {
         return FALSE;
@@ -551,20 +551,33 @@ class Api4SelectQuery extends Api4Query {
         if (!str_starts_with($expr, "$alias.")) {
           continue;
         }
-        $joinField = str_replace("$alias.", '', $expr);
-        // Check for explicit link to FK entity (include entity_id for dynamic FKs)
-        if (
-          // Unique field - might be a link FROM the other entity
-          // FIXME: This is just guessing. We ought to check the schema for all unique fields
-          in_array($joinField, ['id', 'name'], TRUE) ||
-          // FK field - might be a link TO the other entity
-          !empty($joinEntityFields[$joinField]['dfk_entities']) || !empty($joinEntityFields[$joinField]['fk_entity'])
-        ) {
-          // If the join links to a field on another entity
-          if (preg_match('/^[_a-z0-9.]+$/i', $clause[$otherSide])) {
-            $aclStack = [$clause[$otherSide], $expr];
-            return TRUE;
-          }
+        $joinFieldName = str_replace("$alias.", '', $expr);
+        if (!preg_match('/^[_a-z0-9.]+$/i', $clause[$otherSide])) {
+          continue;
+        }
+        $otherSideField = $this->getField($clause[$otherSide]);
+        $otherSideEntity = $otherSideField['entity'] ?? $this->getEntity();
+        // Resolve to table names to accurately compare facade entities like "Individual"
+        $otherSideTable = CoreUtil::getTableName($otherSideEntity);
+        $joinTable = CoreUtil::getTableName($joinEntity);
+
+        $isFK = FALSE;
+        // 1. Other side has FK pointing to joinEntity (e.g. Contact.primary_email_id -> Email.id)
+        if (!empty($otherSideField['fk_entity']) && CoreUtil::getTableName($otherSideField['fk_entity']) === $joinTable) {
+          $isFK = $joinFieldName === ($otherSideField['fk_column'] ?? 'id');
+        }
+        // 2. Joined field has FK pointing to other side entity (e.g. Email.contact_id -> Contact.id)
+        elseif (!empty($joinEntityFields[$joinFieldName]['fk_entity']) && CoreUtil::getTableName($joinEntityFields[$joinFieldName]['fk_entity']) === $otherSideTable) {
+          $isFK = ($otherSideField['name'] ?? $clause[$otherSide]) === ($joinEntityFields[$joinFieldName]['fk_column'] ?? 'id');
+        }
+        // 3. Dynamic FK on joined entity (e.g. ActivityContact.contact_id with dfk_entities)
+        elseif (!empty($joinEntityFields[$joinFieldName]['dfk_entities']) && (in_array($otherSideEntity, $joinEntityFields[$joinFieldName]['dfk_entities'], TRUE) || in_array(CoreUtil::getApiNameFromTableName($otherSideTable), $joinEntityFields[$joinFieldName]['dfk_entities'], TRUE))) {
+          $isFK = TRUE;
+        }
+
+        if ($isFK) {
+          $aclStack = [$clause[$otherSide], $expr];
+          return TRUE;
         }
       }
       return FALSE;
