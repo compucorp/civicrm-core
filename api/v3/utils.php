@@ -1058,22 +1058,19 @@ function _civicrm_api3_custom_format_params($params, &$values, $extends, $entity
     // provides transitional support.
     return;
   }
+  // Only an explicit id identifies an existing record. contact_id is a *related*
+  // contact on Case, Activity, Contribution, Membership and Participant, so using
+  // it as the entity id sends the single-value lookup in
+  // CRM_Core_BAO_CustomField::formatCustomField() at a row owned by a different
+  // record - and when a caller passes several contacts as an array, interpolates
+  // into that unparameterised query as the literal 'Array'.
+  $entityId ??= $params['id'] ?? NULL;
   $values['custom'] = [];
   $checkCheckBoxField = FALSE;
   $entity = $extends;
   if (in_array($extends, CRM_Contact_BAO_ContactType::basicTypes(TRUE), TRUE)) {
     $entity = 'Contact';
   }
-  // Only fall back to contact_id when the custom data extends a contact. On
-  // Case, Contribution, Membership and Participant, contact_id is a *related*
-  // contact rather than this record, so using it as the entity id points the
-  // single-value lookup in CRM_Core_BAO_CustomField::formatCustomField() at a
-  // row belonging to a different record. Webform sends Case clients as an
-  // array, which interpolates into that unparameterised query as the literal
-  // 'Array' and fails before the case is created. Resolving to NULL instead is
-  // also the safe direction for the permission check below, which denies when
-  // it cannot match the stored entity_id.
-  $entityId ??= $params['id'] ?? ($entity === 'Contact' ? $params['contact_id'] ?? NULL : NULL);
 
   $fields = civicrm_api($entity, 'getfields', ['version' => 3, 'action' => 'create']);
   if (!$fields['is_error']) {
