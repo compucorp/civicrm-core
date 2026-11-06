@@ -101,6 +101,54 @@ class CRM_Contribute_BAO_ContributionRecurTest extends CiviUnitTestCase {
   }
 
   /**
+   * A payment recorded after the recurring contribution was cancelled must not undo the cancellation.
+   *
+   * @throws \CRM_Core_Exception
+   */
+  public function testPaymentOnCancelledRecurKeepsItCancelled(): void {
+    $contributionRecur = $this->callAPISuccess('ContributionRecur', 'create', array_merge($this->_params, [
+      'installments' => 1,
+      'contribution_status_id' => 'Cancelled',
+      'cancel_date' => 'yesterday',
+    ]));
+    $before = ContributionRecur::get(FALSE)
+      ->addSelect('next_sched_contribution_date', 'end_date')
+      ->addWhere('id', '=', $contributionRecur['id'])
+      ->execute()
+      ->single();
+
+    $contribution = $this->callAPISuccess('Contribution', 'create', [
+      'contact_id' => $this->_params['contact_id'],
+      'financial_type_id' => 'Donation',
+      'total_amount' => 3,
+      'contribution_status_id' => 'Pending',
+      'contribution_recur_id' => $contributionRecur['id'],
+      'receive_date' => 'yesterday',
+    ]);
+    Payment::create(FALSE)
+      ->setNotificationForCompleteOrder(FALSE)
+      ->addValue('contribution_id', $contribution['id'])
+      ->addValue('total_amount', 3)
+      ->execute();
+
+    $contributionAfter = Contribution::get(FALSE)
+      ->addSelect('contribution_status_id:name')
+      ->addWhere('id', '=', $contribution['id'])
+      ->execute()
+      ->single();
+    $this->assertEquals('Completed', $contributionAfter['contribution_status_id:name']);
+
+    $after = ContributionRecur::get(FALSE)
+      ->addSelect('contribution_status_id:name', 'next_sched_contribution_date', 'end_date')
+      ->addWhere('id', '=', $contributionRecur['id'])
+      ->execute()
+      ->single();
+    $this->assertEquals('Cancelled', $after['contribution_status_id:name']);
+    $this->assertEquals($before['next_sched_contribution_date'], $after['next_sched_contribution_date']);
+    $this->assertEquals($before['end_date'], $after['end_date']);
+  }
+
+  /**
    * Test that a failed payment increments failure_count.
    *
    * https://lab.civicrm.org/dev/core/-/issues/6797
