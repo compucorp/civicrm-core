@@ -673,6 +673,15 @@ class CRM_Utils_String {
         $def->addElement('figcaption', 'Block', 'Flow', 'Common');
         $def->addElement('figure', 'Block', 'Optional: (figcaption, Flow) | (Flow, figcaption) | Flow', 'Common');
       }
+      // Keep overflow, so a fixed-height box (e.g. terms on a registration form)
+      // still scrolls instead of spilling over the fields below it.
+      // HTMLPurifier only allows overflow under CSS.AllowTricky, which would
+      // also allow display and visibility.
+      $css = $config->getCSSDefinition();
+      $overflow = new HTMLPurifier_AttrDef_Enum(['visible', 'hidden', 'scroll', 'auto']);
+      foreach (['overflow', 'overflow-x', 'overflow-y'] as $property) {
+        $css->info[$property] = $overflow;
+      }
       $_filter = new HTMLPurifier($config);
     }
 
