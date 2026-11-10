@@ -4204,7 +4204,9 @@ INNER JOIN civicrm_activity ON civicrm_activity_contact.activity_id = civicrm_ac
       if (!empty($preChangeMembership) && !empty($preChangeMembership['membership_type_id'])) {
         $membershipParams['membership_type_id'] = $preChangeMembership['membership_type_id'];
       }
-      if (empty($membership['end_date']) || (int) $membership['status_id'] !== CRM_Core_PseudoConstant::getKey('CRM_Member_BAO_Membership', 'status_id', 'Pending')) {
+      $isPending = (int) $membership['status_id'] === CRM_Core_PseudoConstant::getKey('CRM_Member_BAO_Membership', 'status_id', 'Pending');
+      $isFirstPaymentForSignup = !$isPending && self::isFirstPaymentForSignup((int) $membership['id'], (int) $contributionID);
+      if (empty($membership['end_date']) || (!$isPending && !$isFirstPaymentForSignup)) {
         // Passing num_terms to the api triggers date calculations, but for pending memberships these may be already calculated.
         // sigh - they should  be  consistent but removing the end date check causes test failures & maybe UI too?
         // The api assumes num_terms is a special sauce for 'is_renewal' so we need to not pass it when updating a pending to completed.
@@ -4222,7 +4224,7 @@ INNER JOIN civicrm_activity ON civicrm_activity_contact.activity_id = civicrm_ac
       // @todo remove all this stuff in favour of letting the api call further down handle in
       // (it is a duplication of what the api does).
       $dates = [];
-      if ($currentMembership) {
+      if ($currentMembership && !$isFirstPaymentForSignup) {
         /*
          * Fixed FOR CRM-4433
          * In BAO/Membership.php(renewMembership function), we skip the extend membership date and status
@@ -4244,7 +4246,7 @@ INNER JOIN civicrm_activity ON civicrm_activity_contact.activity_id = civicrm_ac
         $dates['end_date'] = strtotime($membership['end_date']) > strtotime(CRM_Utils_Date::customFormat($dates['end_date'], '%Y-%m-%d')) ?
           $membership['end_date'] : $dates['end_date'];
       }
-      if ('Pending' === CRM_Core_PseudoConstant::getName('CRM_Member_BAO_Membership', 'status_id', $membership['status_id'])) {
+      if ($isFirstPaymentForSignup || 'Pending' === CRM_Core_PseudoConstant::getName('CRM_Member_BAO_Membership', 'status_id', $membership['status_id'])) {
         $membershipParams['skipStatusCal'] = '';
       }
       else {
@@ -4283,6 +4285,50 @@ INNER JOIN civicrm_activity ON civicrm_activity_contact.activity_id = civicrm_ac
         ->addWhere('activity_type_id:name', 'IN', ['Membership Signup', 'Membership Renewal'])
         ->execute();
     }
+  }
+
+  /**
+   * Is this the first payment for a new membership whose dates were already set at signup?
+   *
+   * The signup activity stays Scheduled until the signup is paid, even if the membership has left Pending.
+   * A membership created in Grace also keeps a Scheduled signup activity, so it must have been created Pending.
+   *
+   * @param int $membershipID
+   * @param int $contributionID
+   *
+   * @return bool
+   * @throws \CRM_Core_Exception
+   */
+  private static function isFirstPaymentForSignup(int $membershipID, int $contributionID): bool {
+    $signupAwaitingPayment = Activity::get(FALSE)
+      ->selectRowCount()
+      ->addWhere('source_record_id', '=', $membershipID)
+      ->addWhere('activity_type_id:name', '=', 'Membership Signup')
+      ->addWhere('status_id:name', '=', 'Scheduled')
+      ->execute()
+      ->count();
+    if (!$signupAwaitingPayment) {
+      return FALSE;
+    }
+    $firstLog = MembershipLog::get(FALSE)
+      ->addSelect('status_id.name')
+      ->addWhere('membership_id', '=', $membershipID)
+      ->addOrderBy('id', 'ASC')
+      ->setLimit(1)
+      ->execute()
+      ->first();
+    if (($firstLog['status_id.name'] ?? NULL) !== 'Pending') {
+      return FALSE;
+    }
+    $otherCompletedPayments = LineItem::get(FALSE)
+      ->selectRowCount()
+      ->addWhere('entity_table', '=', 'civicrm_membership')
+      ->addWhere('entity_id', '=', $membershipID)
+      ->addWhere('contribution_id', '!=', $contributionID)
+      ->addWhere('contribution_id.contribution_status_id:name', '=', 'Completed')
+      ->execute()
+      ->count();
+    return !$otherCompletedPayments;
   }
 
   /**
