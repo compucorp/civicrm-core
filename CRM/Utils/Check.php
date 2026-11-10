@@ -81,39 +81,75 @@ class CRM_Utils_Check {
    */
   public function showPeriodicAlerts() {
     if (CRM_Core_Permission::check('administer CiviCRM system')) {
-      $session = CRM_Core_Session::singleton();
-      if ($session->timer('check_' . __CLASS__, self::CHECK_TIMER)) {
-
-        // Best attempt at re-securing folders
-        $config = CRM_Core_Config::singleton();
-        $config->cleanup(0, FALSE);
-
-        $statusMessages = [];
-        $maxSeverity = 0;
-        foreach ($this->checkAll() as $message) {
-          if (!$message->isVisible()) {
-            continue;
+      $userId = CRM_Core_Session::getLoggedInContactID();
+      $statusCheckedForUser = Civi::cache('checks')->get('status_checked_for_user_' . $userId);
+      if (!$statusCheckedForUser) {
+        $statusMessages = Civi::cache('checks')->get('status_messages');
+        if (!is_array($statusMessages)) {
+          // Best attempt at re-securing folders
+          $config = CRM_Core_Config::singleton();
+          $config->cleanup(0, FALSE);
+          $statusMessages = [];
+          foreach (self::checkAll() as $message) {
+            if (!$message->isVisible()) {
+              continue;
+            }
+            if ($message->getLevel() >= 3) {
+              $statusMessage = $message->getMessage();
+              $statusMessages[] = $statusTitle = $message->getTitle();
+            }
           }
-          if ($message->getLevel() >= 3) {
-            $maxSeverity = max($maxSeverity, $message->getLevel());
-            $statusMessage = $message->getMessage();
-            $statusMessages[] = $statusTitle = $message->getTitle();
-          }
+          Civi::cache('checks')->set('status_messages', $statusMessages, self::CHECK_TIMER);
         }
 
         if ($statusMessages) {
-          if (count($statusMessages) > 1) {
-            $statusTitle = self::toStatusLabel($maxSeverity);
-            $statusMessage = '<ul><li>' . implode('</li><li>', $statusMessages) . '</li></ul>';
-          }
+          $maxSeverity = self::getMaxSeverity(TRUE);
+          $statusTitle = self::toStatusLabel($maxSeverity);
+          $statusMessage = '<ul><li>' . implode('</li><li>', $statusMessages) . '</li></ul>';
 
           $statusMessage .= '<p><a href="' . CRM_Utils_System::url('civicrm/a/#/status') . '">' . ts('View details and manage alerts') . '</a></p>';
 
           $statusType = $maxSeverity >= 4 ? 'error' : 'alert';
           CRM_Core_Session::setStatus($statusMessage, $statusTitle, $statusType);
         }
+        Civi::cache('checks')->set('status_checked_for_user_' . $userId, TRUE, self::CHECK_TIMER);
       }
     }
+  }
+
+  /**
+   * Returns the max severity of the status checks.
+   * The result is cahced as this status is shown in the footer of the CiviCRM page. So no need to refresh this.
+   *
+   * @param bool $force
+   *   Force refresh the max severity calculation.
+   * @return int
+   */
+  public static function getMaxSeverity(bool $force = FALSE): int {
+    $maxSeverity = Civi::cache('checks')->get('systemStatusCheckResult');
+    if ($maxSeverity === NULL || $force) {
+      $maxSeverity = self::publishMaxSeverity(self::checkAll());
+    }
+    return $maxSeverity ?? 0;
+  }
+
+  /**
+   * Publish the summary severity of a complete set of status messages to the cache.
+   *
+   * @param \CRM_Utils_Check_Message[] $messages
+   *   A full, unfiltered sweep, as returned by checkAll().
+   *
+   * @return int
+   */
+  private static function publishMaxSeverity(array $messages): int {
+    $maxSeverity = 1;
+    foreach ($messages as $message) {
+      if ($message->isVisible()) {
+        $maxSeverity = max($maxSeverity, $message->getLevel());
+      }
+    }
+    Civi::cache('checks')->set('systemStatusCheckResult', $maxSeverity, self::CHECK_TIMER);
+    return $maxSeverity;
   }
 
   /**
@@ -176,24 +212,13 @@ class CRM_Utils_Check {
    * Calls hook_civicrm_check() for extensions to add or modify messages.
    * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_check/
    *
-   * @param bool $max
-   *   Whether to return just the maximum non-hushed severity
-   *
    * @return CRM_Utils_Check_Message[]
    */
-  public static function checkAll($max = FALSE) {
-    $messages = self::checkStatus();
-
-    $maxSeverity = 1;
-    foreach ($messages as $message) {
-      if ($message->isVisible()) {
-        $maxSeverity = max($maxSeverity, $message->getLevel());
-      }
+  public static function checkAll() {
+    if (!isset(\Civi::$statics['CRM_Utils_Check']['messages'])) {
+      \Civi::$statics['CRM_Utils_Check']['messages'] = self::checkStatus();
     }
-
-    Civi::cache('checks')->set('systemStatusCheckResult', $maxSeverity);
-
-    return ($max) ? $maxSeverity : $messages;
+    return \Civi::$statics['CRM_Utils_Check']['messages'];
   }
 
   /**
@@ -223,9 +248,43 @@ class CRM_Utils_Check {
       }
     }
 
-    CRM_Utils_Hook::check($messages, $statusNames, $includeDisabled);
+    try {
+      CRM_Utils_Hook::check($messages, $statusNames, $includeDisabled);
+    }
+    catch (Throwable $e) {
+      $messages[] = self::failedCheckMessage('hook_civicrm_check', $e);
+    }
+
+    // Publish the summary of a completed, unfiltered sweep, so a live status view
+    // refreshes the cached footer severity instead of it outlasting a cleared warning.
+    // Only a full, enabled-only run: a name-filtered sweep summarises a subset, and an
+    // includeDisabled sweep counts disabled checks.
+    if (!$statusNames && !$includeDisabled) {
+      self::publishMaxSeverity($messages);
+    }
 
     return $messages;
+  }
+
+  /**
+   * Report a check that threw instead of returning its messages.
+   *
+   * @param string $name
+   *   The check method, or the hook that failed.
+   * @param \Throwable $e
+   *
+   * @return CRM_Utils_Check_Message
+   * @internal
+   */
+  public static function failedCheckMessage(string $name, Throwable $e): CRM_Utils_Check_Message {
+    Civi::log()->error("System check $name failed: " . $e->getMessage(), ['exception' => $e]);
+    return new CRM_Utils_Check_Message(
+      $name,
+      ts('The system check %1 could not run: %2', [1 => $name, 2 => htmlentities($e->getMessage())]),
+      ts('System Check Failed'),
+      \Psr\Log\LogLevel::WARNING,
+      'fa-bug'
+    );
   }
 
   /**
