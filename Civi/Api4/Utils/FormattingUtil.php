@@ -307,9 +307,35 @@ class FormattingUtil {
       $entityValues['check_permissions'] = FALSE;
       $options = $baoName::buildOptions($fieldName, $context, $entityValues);
     }
-    // Fallback for option lists that exist in the api but not the BAO
+    // Fallback for option lists that exist in the api but not the BAO.
+    // Cached per domain/locale to avoid repeating getFields for every record.
+    // Backport of civicrm/civicrm-core#36247 (CiviCRM 6.18). On 5.75 the BAO is only used for the
+    // name/label/abbr suffixes, so every :icon/:color/:description/:grouping/:url suffix also comes
+    // through here, and saving tags, option groups or contact types does not clear the metadata
+    // cache; entries therefore expire after an hour.
     if (!isset($options) || $options === FALSE) {
-      $options = civicrm_api4($field['entity'], 'getFields', ['checkPermissions' => FALSE, 'action' => $action, 'loadOptions' => ['id', $valueType], 'where' => [['name', '=', $field['name']]]])[0]['options'] ?? NULL;
+      $cacheKey = implode('_', [
+        \CRM_Core_Config::domainID(),
+        \CRM_Core_I18n::getLocale(),
+        'api4options',
+        $field['entity'],
+        \CRM_Utils_String::munge($field['name'], '_', 0),
+        $valueType,
+        $action,
+      ]);
+      // Only a found option list is cached; "no options" is not cached as a negative.
+      $options = \Civi::cache('metadata')->get($cacheKey);
+      if (!is_array($options)) {
+        $options = civicrm_api4($field['entity'], 'getFields', [
+          'checkPermissions' => FALSE,
+          'action' => $action,
+          'loadOptions' => ['id', $valueType],
+          'where' => [['name', '=', $field['name']]],
+        ])[0]['options'] ?? NULL;
+        if (is_array($options)) {
+          \Civi::cache('metadata')->set($cacheKey, $options, 3600);
+        }
+      }
       $options = $options ? array_column($options, $valueType, 'id') : $options;
     }
     if (is_array($options)) {
