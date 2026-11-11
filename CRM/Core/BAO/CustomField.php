@@ -667,10 +667,8 @@ class CRM_Core_BAO_CustomField extends CRM_Core_DAO_CustomField implements \Civi
     $groupName = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_CustomGroup', $field->custom_group_id);
     $fieldAttributes['data-crm-custom'] = $groupName . ':' . $field->name;
 
-    // Search forms get a plain text box for long-text fields (CRM-2183). A
-    // rich-text editor left empty can submit markup such as <p>&nbsp;</p>,
-    // which then becomes a search criterion that matches nothing.
-    if ($search && in_array($widget, ['TextArea', 'RichTextEditor'], TRUE)) {
+    // Fixed for Issue CRM-2183
+    if ($widget == 'TextArea' && $search) {
       $widget = 'Text';
     }
 
