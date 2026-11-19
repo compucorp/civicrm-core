@@ -83,8 +83,12 @@ class AfformAutocompleteSubscriber extends AutoService implements EventSubscribe
     // If no model entity, it's a search display
     if (!$entity) {
       $searchDisplay = $formDataModel->getSearchDisplay($entityName);
-      $apiEntity = civicrm_api4('SavedSearch', 'get', ['where' => [['name', '=', $searchDisplay['searchName']]]])
-        ->first()['api_entity'] ?? NULL;
+      // Look the saved search up without permission checks, as upstream does (SavedSearch::get(FALSE)):
+      // anonymous and portal users cannot read SavedSearch, which would leave $apiEntity empty.
+      $apiEntity = civicrm_api4('SavedSearch', 'get', [
+        'checkPermissions' => FALSE,
+        'where' => [['name', '=', $searchDisplay['searchName']]],
+      ])->first()['api_entity'] ?? NULL;
       $formField = $searchDisplay['fields'][$fieldName]['defn'] ?? [];
     }
     // If using a join (e.g. Contact -> Email)
@@ -97,6 +101,10 @@ class AfformAutocompleteSubscriber extends AutoService implements EventSubscribe
       $apiEntity = $entity['type'];
       $isId = $fieldName === CoreUtil::getIdFieldName($apiEntity);
       $formField = $entity['fields'][$fieldName]['defn'] ?? [];
+    }
+
+    if (!$apiEntity) {
+      throw new UnauthorizedException(E::ts('Field %1 does not refer to %2.', [1 => $fieldName, 2 => $apiRequest->getEntityName()]));
     }
 
     // The field's saved search and security setting are for the entity it refers to; nothing else is searched through it.
