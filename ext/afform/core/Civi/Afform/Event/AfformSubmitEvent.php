@@ -30,6 +30,12 @@ class AfformSubmitEvent extends AfformBaseEvent {
   public $records;
 
   /**
+   * Indexes of records whose id was found by a dedupe rule rather than given by the form.
+   * @var array
+   */
+  public $dedupeMatches = [];
+
+  /**
    * AfformSubmitEvent constructor.
    *
    * @param array $afform
