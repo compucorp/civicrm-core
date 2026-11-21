@@ -1,0 +1,165 @@
+name: Packaging
+on:
+  push:
+    branches:
+      - 6.20.1-patches
+
+env:
+  base_version: 6.20.1
+
+jobs:
+  build:
+    name: Packaging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Civi
+        env:
+          civi_package: civicrm-${{ env.base_version }}-drupal.tar.gz
+        run: |
+          cd ..
+          pwd
+          mkdir to-be-patched
+          wget https://storage.googleapis.com/civicrm/civicrm-stable/${base_version}/${civi_package}
+          tar xzf ./${civi_package} -C to-be-patched
+
+      - name: Remove CKEditor demo pages
+        # CKEditor 4 ships demo pages that every site then serves publicly. CVE-2023-4771
+        # and CVE-2024-24816 both live in samples/old/, and two files there are PHP that
+        # echoes POST data back. Bumping does not help: CiviCRM 6.20.1 bundles ckeditor
+        # 4.22.1, which ships the same samples tree as 4.18.0 (5.75.0).
+        # Both CVEs need 4.24.0-LTS, which is CKSource's paid Extended Support line.
+        #
+        # This has to happen here rather than in the fork: bower_components/ is not tracked
+        # on the patches branch, so the patch diff has nothing to delete. Deleting in a
+        # client repo does not hold either - the next CiviCRM upgrade restores the tree.
+        #
+        # samples/ cannot go wholesale. CKEditorConfig.php::addResources() loads five files
+        # out of it at runtime (three toolbarconfigurator scripts, fontello.css and
+        # samples.css), fontello.css pulls samples/toolbarconfigurator/font/, and
+        # plugins/preview/preview.html is a runtime file despite sitting near the samples.
+        # Keep exactly those - the guard below fails the build if any of them goes missing.
+        run: |
+          cd ../to-be-patched/civicrm/bower_components/ckeditor
+          rm -rf samples/index.html \
+                 samples/js \
+                 samples/img \
+                 samples/old \
+                 samples/toolbarconfigurator/index.html \
+                 samples/toolbarconfigurator/js/toolbartextmodifier.js \
+                 samples/toolbarconfigurator/lib
+          for f in samples/toolbarconfigurator/js/fulltoolbareditor.js \
+                   samples/toolbarconfigurator/js/abstracttoolbarmodifier.js \
+                   samples/toolbarconfigurator/js/toolbarmodifier.js \
+                   samples/toolbarconfigurator/css/fontello.css \
+                   samples/css/samples.css \
+                   plugins/preview/preview.html; do
+            test -f "$f" || { echo "::error::CKEditor runtime file removed by mistake: $f"; exit 1; }
+          done
+          test -n "$(ls -A samples/toolbarconfigurator/font 2>/dev/null)" \
+            || { echo "::error::CKEditor fontello fonts removed by mistake"; exit 1; }
+          # Every demo page is HTML or PHP and none of the kept files is either, so the
+          # sweep covers both wholesale - a page a later CKEditor adds under a new name
+          # fails the build here instead of shipping.
+          leftover=$(find samples \( -name '*.php' -o -name '*.htm*' \) -print)
+          if [ -n "$leftover" ]; then
+            echo "::error::CKEditor demo pages still present after cleanup"
+            echo "$leftover"
+            exit 1
+          fi
+
+      - name: Checkout the fork
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.base_version }}
+
+      - name: Create patched package
+        uses: compucorp/create-patch-from-fork@1.0.0
+        id: "patch"
+        with:
+          base_version: ${{ env.base_version }}
+          project_dir: '../to-be-patched/civicrm'
+          project_name: 'civicrm'
+          project_type: 'civicrm-core'
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, json, mbstring, mysqli, simplexml, xml, xmlreader, xmlwriter, zip, zlib
+          tools: composer:2.8.12
+
+      - name: Install locked library versions
+        # No COMPOSER_AUTH here on purpose. Composer 2.8.12 only accepts [.A-Za-z0-9_] in a
+        # GitHub token, and GitHub's new GITHUB_TOKEN format (ghs_<id>_<base64url JWT>) can
+        # contain a '-', so passing it makes the install fail (GHSA-f9f8-rm49-7jv2, fixed in
+        # Composer 2.9.8, which compile-plugin blocks). Installs work unauthenticated: this
+        # run only fetches the packages that differ from upstream's tarball, well under the
+        # 60/hour anonymous limit. Do not add it back while Composer is pinned below 2.9.8.
+        run: |
+          cd ../to-be-patched/civicrm
+          composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+          # --no-scripts above is required: tools/scripts/composer/ is not shipped in the
+          # distributed tarball. But those scripts post-process vendor/ after install - most
+          # importantly dompdf-cleanup.sh, which writes dompdf's installed-fonts map (to
+          # DejaVu on 6.4.1+, to the core PDF fonts on 5.75.0, which deletes DejaVu to save
+          # 12mb). Any package Composer replaces would otherwise silently lose that
+          # post-processing; for dompdf on 6.4.1 that means non-Latin text stops rendering
+          # in PDFs. So run them here from the fork checkout, deriving the list from
+          # composer.json so it cannot drift.
+          php -r '
+            $j = json_decode(file_get_contents("composer.json"), true);
+            foreach (($j["scripts"]["post-install-cmd"] ?? []) as $cmd) {
+              echo preg_replace("#^bash tools/#", "bash " . getenv("GITHUB_WORKSPACE") . "/tools/", $cmd), PHP_EOL;
+            }
+          ' > ../post-install-cmd.sh
+          # Fail loudly if that produced nothing - a renamed key or a composer.json that
+          # fails to parse would be swallowed by the `?? []`, the scripts would not run, and
+          # the font regression would come back silently. The guard and audit below only
+          # compare versions, so neither would catch it.
+          test -s ../post-install-cmd.sh || { echo "::error::no post-install-cmd entries found in composer.json"; exit 1; }
+          cat ../post-install-cmd.sh
+          bash -e ../post-install-cmd.sh
+          cd ..
+          tar czf "${{ steps.patch.outputs.package_path }}" civicrm
+
+      - name: Verify vendor matches the lock
+        run: |
+          cd ../to-be-patched/civicrm
+          composer validate --no-check-all --no-check-publish
+          php -r '
+            $lock = json_decode(file_get_contents("composer.lock"), true)["packages"];
+            $inst = json_decode(file_get_contents("vendor/composer/installed.json"), true)["packages"];
+            $l = []; foreach ($lock as $p) { $l[$p["name"]] = $p["version"]; }
+            $v = []; foreach ($inst as $p) { $v[$p["name"]] = $p["version"]; }
+            $bad = [];
+            foreach ($l as $n => $ver) {
+              if (!isset($v[$n])) { $bad[] = "$n: locked $ver, not installed"; }
+              elseif ($v[$n] !== $ver) { $bad[] = "$n: locked $ver, vendor has {$v[$n]}"; }
+            }
+            foreach ($v as $n => $ver) { if (!isset($l[$n])) { $bad[] = "$n: vendor has $ver, not in lock"; } }
+            if ($bad) { fwrite(STDERR, "vendor/ does not match composer.lock:" . PHP_EOL . "  " . implode(PHP_EOL . "  ", $bad) . PHP_EOL); exit(1); }
+            printf("vendor/ matches composer.lock (%d packages)" . PHP_EOL, count($l));
+          '
+
+      - name: Create a new release
+        id: create_release
+        uses: compucorp/create-release@target_commitish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "${{ steps.patch.outputs.version }}"
+          target_commitish: "${{ github.sha }}"
+          release_name: "${{ steps.patch.outputs.version }}"
+          body: "${{ steps.patch.outputs.version }}"
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: "${{ steps.patch.outputs.package_path }}"
+          asset_name: "${{ steps.patch.outputs.package }}"
+          asset_content_type: application/gzip
