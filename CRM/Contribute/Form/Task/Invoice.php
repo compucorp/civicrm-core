@@ -678,6 +678,12 @@ class CRM_Contribute_Form_Task_Invoice extends CRM_Contribute_Form_Task {
   private static function validateContributionIds(array $ids, ?int $contactID): bool {
     // Validate all contributions
     if (!CRM_Core_Permission::check('access CiviContribute')) {
+      // The route's access check (checkDownloadInvoice) compares the logged-in
+      // contact with $_GET['cid'], but the contact id here is read from
+      // $_REQUEST, where POST wins. Only the logged-in contact's own invoices.
+      if (empty($contactID) || $contactID !== (int) CRM_Core_Session::getLoggedInContactID()) {
+        return FALSE;
+      }
       $contributions = \Civi\Api4\Contribution::get(FALSE)
         ->addWhere('id', 'IN', $ids)
         ->addWhere('contact_id', '!=', $contactID)
