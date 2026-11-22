@@ -697,7 +697,9 @@ class CRM_Contribute_Form_AbstractEditPayment extends CRM_Contact_Form_Task {
     if ($this->isSubmitProcessorPayment()) {
       return FALSE;
     }
-    $submittedStatus = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', $this->getSubmittedValue('contribution_status_id'));
+    // The form submits the status ID. getKey() looks a name up and returns its ID, so given an ID
+    // it never returned 'Pending' and a Pending back-office contribution was never pay later.
+    $submittedStatus = CRM_Core_PseudoConstant::getName('CRM_Contribute_BAO_Contribution', 'contribution_status_id', $this->getSubmittedValue('contribution_status_id'));
     return $submittedStatus === 'Pending';
   }
 
