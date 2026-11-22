@@ -154,6 +154,18 @@ class CRM_Contribute_BAO_FinancialProcessor {
   }
 
   /**
+   * Should a Completed contribution being Cancelled or Refunded be reversed through
+   * Accounts Receivable (two lines, the opposite of how it was recorded).
+   *
+   * @return bool
+   */
+  private function isRecordAccountsReceivableOnRefund(): bool {
+    return Civi::settings()->get('always_post_to_accounts_receivable')
+      && $this->getOriginalContributionStatus() === 'Completed'
+      && in_array($this->getUpdatedContributionStatus(), ['Cancelled', 'Refunded'], TRUE);
+  }
+
+  /**
    * @param int $financialTypeID
    *
    * @return int|null
@@ -724,7 +736,8 @@ class CRM_Contribute_BAO_FinancialProcessor {
       return;
     }
 
-    if ($this->isContributionUpdateARefund()) {
+    $isARefund = $this->isContributionUpdateARefund();
+    if ($isARefund) {
       // @todo we should stop passing $params by reference - splitting this out would be a step towards that.
       $params['trxnParams']['total_amount'] = -$params['total_amount'];
     }
@@ -744,7 +757,21 @@ class CRM_Contribute_BAO_FinancialProcessor {
       }
     }
 
-    if ($this->isOriginalStatusPending() && $this->isCompletedTransaction()
+    // A Completed contribution being Cancelled or Refunded is split into an Accounts Receivable
+    // line and a payment line when the site always posts to Accounts Receivable. When no
+    // Accounts Receivable line is recorded the standard handling below applies.
+    $refundReceivableTrxnID = NULL;
+    if ($isARefund && $this->isRecordAccountsReceivableOnRefund() && !empty($params['line_item'])) {
+      $refundTrxnParams = $params['trxnParams'];
+      $refundTrxnParams['currency'] = $params['currency'] ?? $params['prevContribution']->currency;
+      $refundReceivableTrxnID = $this->recordAlwaysAccountsReceivable($refundTrxnParams, $params);
+      if ($refundReceivableTrxnID) {
+        $params['trxnParams'] = $refundTrxnParams;
+      }
+    }
+
+    if (($this->isOriginalStatusPending() && $this->isCompletedTransaction())
+      || $refundReceivableTrxnID
     ) {
       if (empty($params['line_item'])) {
         //CRM-15296
@@ -757,8 +784,15 @@ class CRM_Contribute_BAO_FinancialProcessor {
       // This is an update so original currency if none passed in.
       $params['trxnParams']['currency'] = $params['currency'] ?? $params['prevContribution']->currency;
 
-      if ($this->isRecordAccountsReceivable() && !$this->getOriginalContributionValue('is_pay_later')) {
-        $financialTrxnIDs[] = $this->recordAlwaysAccountsReceivable($params['trxnParams'], $params);
+      $financialTrxnIDs = [];
+      if ($refundReceivableTrxnID) {
+        $financialTrxnIDs[] = $refundReceivableTrxnID;
+      }
+      elseif ($this->isRecordAccountsReceivable() && !$this->getOriginalContributionValue('is_pay_later')) {
+        $receivableTrxnID = $this->recordAlwaysAccountsReceivable($params['trxnParams'], $params);
+        if ($receivableTrxnID) {
+          $financialTrxnIDs[] = $receivableTrxnID;
+        }
       }
       $trxn = CRM_Core_BAO_FinancialTrxn::create($params['trxnParams']);
       // @todo we should stop passing $params by reference - splitting this out would be a step towards that.
@@ -827,10 +861,44 @@ class CRM_Contribute_BAO_FinancialProcessor {
     $params = $trxnParams;
     $arAccountId = $this->getAccountsReceivableAccount($this->getUpdatedContributionValue('financial_type_id'));
     $params['to_financial_account_id'] = $arAccountId;
-    $params['status_id'] = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending');
+    if ($this->isCompletedTransaction()) {
+      $params['status_id'] = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending');
+    }
+    else {
+      // Cancelled or Refunded: the receivable line carries the contribution's new status.
+      $params['from_financial_account_id'] = NULL;
+      $params['status_id'] = $this->getUpdatedContribution()->contribution_status_id;
+    }
     $params['is_payment'] = FALSE;
+
+    // Do not record the same receivable line twice for one contribution, e.g. when a pending
+    // pay-later contribution is paid through a contribution page.
+    if (!empty($params['contribution_id'])) {
+      $existing = \Civi\Api4\EntityFinancialTrxn::get(FALSE)
+        ->addSelect('financial_trxn_id')
+        ->addWhere('entity_id', '=', $params['contribution_id'])
+        ->addWhere('entity_table', '=', 'civicrm_contribution')
+        ->addWhere('financial_trxn_id.status_id', '=', $params['status_id'])
+        ->addWhere('financial_trxn_id.is_payment', '=', 0);
+      if (!empty($params['to_financial_account_id'])) {
+        $existing->addWhere('financial_trxn_id.to_financial_account_id', '=', $params['to_financial_account_id']);
+      }
+      if (!empty($params['from_financial_account_id'])) {
+        $existing->addWhere('financial_trxn_id.from_financial_account_id', '=', $params['from_financial_account_id']);
+      }
+      if (!empty($params['total_amount'])) {
+        $existing->addWhere('financial_trxn_id.total_amount', '=', $params['total_amount']);
+      }
+      if (!empty($params['currency'])) {
+        $existing->addWhere('financial_trxn_id.currency', '=', $params['currency']);
+      }
+      if (!empty($existing->execute()->first()['financial_trxn_id'])) {
+        return NULL;
+      }
+    }
+
     $trxn = CRM_Core_BAO_FinancialTrxn::create($params);
-    $trxnParams['from_financial_account_id'] = $params['to_financial_account_id'];
+    $trxnParams['from_financial_account_id'] = $arAccountId;
     return $trxn->id;
   }
 
