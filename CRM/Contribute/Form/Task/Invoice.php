@@ -139,6 +139,7 @@ class CRM_Contribute_Form_Task_Invoice extends CRM_Contribute_Form_Task {
       CRM_Core_Error::statusBounce(ts('Your user record does not have a valid email address and no from addresses have been configured.'));
     }
 
+    $this->_fromEmails = $fromEmailValues;
     $defaults = [];
     if (is_numeric(key($fromEmailValues))) {
       $emailID = (int) key($fromEmailValues);
