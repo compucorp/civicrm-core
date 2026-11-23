@@ -1863,7 +1863,8 @@ class CRM_Event_Form_Participant extends CRM_Contribute_Form_AbstractEditPayment
           ->setNotificationForPayment(FALSE)
           ->addValue('contribution_id', $contributionID)
           ->addValue('total_amount', $paymentAmount)
-          ->addValue('payment_processor_id', $this->getPaymentProcessorID())
+          // The form keeps the processor in _paymentProcessor: getPaymentProcessorID() reads a property this form never sets.
+          ->addValue('payment_processor_id', $this->isSubmitProcessorPayment() ? (int) $this->_paymentProcessor['id'] : NULL)
           ->addValue('payment_instrument_id', $this->getPaymentInstrumentID())
           ->addValue('trxn_id', $result['trxn_id'] ?? NULL)
           ->addValue('fee_amount', $result['fee_amount'] ?? NULL)
