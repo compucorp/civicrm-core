@@ -119,8 +119,13 @@ class CRM_Contribute_Form_Contribution_Confirm extends CRM_Contribute_Form_Contr
    * @throws \CRM_Core_Exception
    */
   public function isRecordPaymentOnly(): bool {
-    $isRecordPaymentOnly = $this->getSubmittedValue('total_amount') && $this->getSubmittedValue('total_amount') !== $this->getExistingContributionValue('total_amount');
-    return $isRecordPaymentOnly;
+    // The submitted amount is a string and the stored amount a float, so a strict comparison always differed
+    // and every "pay now" of the full amount was handled as a partial payment.
+    $submittedAmount = $this->getSubmittedValue('total_amount');
+    if (!$submittedAmount) {
+      return FALSE;
+    }
+    return round((float) CRM_Utils_Rule::cleanMoney((string) $submittedAmount), 2) !== round((float) $this->getExistingContributionValue('total_amount'), 2);
   }
 
   /**
