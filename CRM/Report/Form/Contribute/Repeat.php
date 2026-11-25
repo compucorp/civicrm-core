@@ -879,6 +879,12 @@ GROUP BY    currency
       'type' => CRM_Utils_Type::T_INT,
     ];
 
+    // Read the row count now: resolving the relative date ranges below runs a query, after which
+    // FOUND_ROWS() no longer describes this report's query and the pager is not drawn.
+    if ($this->_limit && !$this->_rowsFound) {
+      $this->_rowsFound = CRM_Core_DAO::singleValueQuery('SELECT FOUND_ROWS()');
+    }
+
     // hack to fix title
     list($from1, $to1) = $this->getFromTo(CRM_Utils_Array::value("receive_date1_relative", $this->_params),
       $this->_params["receive_date1_from"] ?? NULL,
