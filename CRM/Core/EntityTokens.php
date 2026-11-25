@@ -616,12 +616,43 @@ class CRM_Core_EntityTokens extends AbstractTokenSubscriber {
       $value = $this->getFieldValue($row, $this->getCustomFieldName($id));
     }
     catch (CRM_Core_Exception $exception) {
-      return '';
+      // A field of a multi-record custom group is not a field of the entity in APIv4, so it is
+      // not in the token metadata and was not prefetched. Fetch it the way
+      // TokenRow::customToken() did before these tokens were formatted from the prefetched row.
+      $value = $this->getMultiRecordCustomFieldValue($row, $id);
     }
     if ($value === NULL || $value === '' || $value === []) {
       return '';
     }
     return (string) CRM_Core_BAO_CustomField::displayValue($value, $id);
+  }
+
+  /**
+   * Get the stored value of a custom field that the entity's APIv4 fields do not include.
+   *
+   * @param \Civi\Token\TokenRow $row
+   * @param int $customFieldID
+   *
+   * @return mixed
+   *   The stored value, or NULL when there is none.
+   */
+  private function getMultiRecordCustomFieldValue(TokenRow $row, int $customFieldID) {
+    $entityID = $this->getFieldValue($row, 'id');
+    if (empty($entityID)) {
+      return NULL;
+    }
+    try {
+      // APIv3 is what TokenRow::customToken() used for this: for a multi-record group it
+      // answers with one record's value under the plain custom_N key.
+      $record = civicrm_api3($this->getApiEntityName(), 'getsingle', [
+        'return' => 'custom_' . $customFieldID,
+        'id' => $entityID,
+      ]);
+    }
+    catch (CRM_Core_Exception $exception) {
+      return NULL;
+    }
+    return $record['custom_' . $customFieldID] ?? NULL;
   }
 
   /**
