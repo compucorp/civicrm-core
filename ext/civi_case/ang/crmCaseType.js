@@ -369,7 +369,9 @@
       $scope.caseType.definition.activityAsgmtGrps = $scope.caseType.definition.activityAsgmtGrps || [];
 
       $scope.caseType.definition.activitySets.forEach((set) => {
-        set.activityTypes.forEach((type) => {
+        // A set stored without <ActivityTypes> (e.g. the Prospect extension's "Default Prospect Workflow") has none:
+        // lodash's _.each() skipped it, a bare forEach() throws and the editor never renders.
+        (set.activityTypes || []).forEach((type) => {
           var isDefaultAssigneeTypeUndefined = type.default_assignee_type === undefined;
           var typeDefinition = $scope.activityTypes[type.name];
           type.label = (typeDefinition && typeDefinition.label) || type.name;
