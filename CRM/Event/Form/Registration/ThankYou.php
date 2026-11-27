@@ -100,7 +100,16 @@ class CRM_Event_Form_Registration_ThankYou extends CRM_Event_Form_Registration {
     }
 
     if ($invoicing && $this->hasOrder()) {
-      $this->assign('totalTaxAmount', $this->getOrder()->getTotalTaxAmount());
+      // Sum the tax of the line items this registration saved (the ones listed above), not of a
+      // fresh Order: a fresh Order re-runs hook_civicrm_buildAmount after the registration, when a
+      // discount code it used up (CiviDiscount count_max / count_user_max) no longer applies.
+      $totalTaxAmount = 0;
+      foreach ($lineItemForTemplate as $lineItems) {
+        foreach ($lineItems as $lineItem) {
+          $totalTaxAmount += $lineItem['tax_amount'] ?? 0;
+        }
+      }
+      $this->assign('totalTaxAmount', $totalTaxAmount);
     }
     $this->assign('totalAmount', $this->get('totalAmount'));
 
