@@ -238,9 +238,9 @@ LEFT JOIN  civicrm_contact scheduledContact ON ( $mailing.scheduled_id = schedul
         ],
         CRM_Core_Action::REVERT => [
           'name' => ts('Unschedule'),
-          'url' => 'civicrm/mailing/browse',
+          'url' => 'civicrm/mailing/action',
           'qs' => 'action=revert&mid=%%mid%%&reset=1',
-          'extra' => 'onclick="if (confirm(\'' . $unscheduleExtra . '\')) this.href+=\'&amp;confirmed=1\'; else return false;"',
+          'class' => 'crm-popup',
           'title' => ts('Unschedule Mailing'),
           'weight' => CRM_Core_Action::getWeight(CRM_Core_Action::REVERT),
         ],
